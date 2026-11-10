@@ -70,8 +70,7 @@ func Retriable(err error) bool {
 	return !errors.Is(err, ErrTerminal)
 }
 
-// Unreachable reports whether err holds a transport failure (dial, DNS, TLS, timeout, cancellation)
-// and no HTTP response. Any response, a server error included, means the API server was reached.
+// Unreachable reports whether err is a transport failure with no API server response.
 func Unreachable(err error) bool {
 	if err == nil {
 		return false
@@ -90,8 +89,8 @@ func Unreachable(err error) bool {
 
 // Sync creates/updates the ClusterRoles and ClusterRoleBindings implied by policy's role catalog,
 // and returns the set of object names that are now desired (for use by [Prune]) and whether
-// anything was actually created or updated. A binding that fails to apply does not stop the rest
-// from being applied; all failures are joined into the returned error.
+// anything was actually created or updated. A refused binding does not stop the rest; an
+// [Unreachable] one does. All failures are joined into the returned error.
 func Sync(ctx context.Context, childCl client.Client, policy *kcmv1.RBACPolicy) (desiredRoles, desiredBindings map[string]struct{}, changed bool, _ error) {
 	desiredRoles = make(map[string]struct{})
 	desiredBindings = make(map[string]struct{})
@@ -115,6 +114,9 @@ func Sync(ctx context.Context, childCl client.Client, policy *kcmv1.RBACPolicy) 
 			roleChanged, err := applyClusterRole(ctx, childCl, binding.ClusterRole, binding.Rules)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("applying ClusterRole %s: %w", binding.ClusterRole, err))
+				if Unreachable(err) {
+					break
+				}
 				continue
 			}
 			changed = changed || roleChanged
@@ -125,6 +127,9 @@ func Sync(ctx context.Context, childCl client.Client, policy *kcmv1.RBACPolicy) 
 		changed = changed || bindingChanged
 		if err != nil {
 			errs = append(errs, fmt.Errorf("applying ClusterRoleBinding %s: %w", bindingName, err))
+			if Unreachable(err) {
+				break
+			}
 		}
 	}
 

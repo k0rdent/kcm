@@ -1073,44 +1073,45 @@ spec:
                   minimum: 1
                   type: integer
                 rbacPolicy:
-                  description: rbacPolicy reports the state of the [RBACPolicy] sync to the child cluster.
+                  description: rbacPolicy reports the [RBACPolicy] sync state.
                   minProperties: 1
                   properties:
                     grant:
-                      description: grant reports whether objects created from the [RBACPolicy] may be live in the child cluster.
+                      description: grant reports whether [RBACPolicy] objects may be live in the child cluster.
                       enum:
                         - Granted
                       type: string
                     lastAppliedGeneration:
-                      description: lastAppliedGeneration is the metadata.generation of lastAppliedPolicy the last successful sync applied.
+                      description: lastAppliedGeneration is the lastAppliedPolicy generation of the last successful sync.
                       format: int64
                       minimum: 1
                       type: integer
                     lastAppliedPolicy:
-                      description: lastAppliedPolicy is the name of the [RBACPolicy] the last successful sync applied.
+                      description: lastAppliedPolicy is the [RBACPolicy] name of the last successful sync.
                       maxLength: 256
                       minLength: 1
                       type: string
                     lastAppliedTime:
-                      description: lastAppliedTime is when the last successful sync, periodic resyncs included, completed.
+                      description: lastAppliedTime is when the last successful sync completed.
                       format: date-time
                       type: string
                     lastSyncTime:
-                      description: lastSyncTime is when the last sync or revoke attempt completed, successful or not.
+                      description: |-
+                        lastSyncTime is when the last sync or revoke attempt completed. Repeated identical
+                        failures refresh it at most every 5 minutes. Cleared once a revoke completes.
                       format: date-time
                       type: string
                     syncHash:
-                      description: syncHash identifies the [RBACPolicy] revision and resync request of the last sync attempt.
+                      description: syncHash identifies the [RBACPolicy] revision and resync request of the last attempt.
                       maxLength: 64
                       minLength: 1
                       type: string
                   type: object
                 rbacPolicyGrant:
                   description: |-
-                    rbacPolicyGrant is the grant marker written by earlier releases.
+                    rbacPolicyGrant mirrors rbacPolicy.grant for earlier releases.
 
-                    Deprecated: superseded by rbacPolicy.grant. Kept so that a grant recorded before an upgrade
-                    is still revoked; it is moved to rbacPolicy.grant on the next sync and cleared on revoke.
+                    Deprecated: use rbacPolicy.grant. Kept for upgrades and downgrades.
                   enum:
                     - Granted
                   type: string

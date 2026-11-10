@@ -3817,7 +3817,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		g.Expect(mgmtCl.Status().Update(t.Context(), cd)).To(Succeed())
 	})
 
-	t.Run("a sync that changed the child cluster before timing out is partially applied", func(t *testing.T) {
+	t.Run("a sync whose failed requests got no response is unreachable even if earlier ones changed the child cluster", func(t *testing.T) {
 		g := NewWithT(t)
 		cd := newCD(policy.Name, "test-auth")
 		cd.UID = "partial-timeout-cd-uid"
@@ -3848,7 +3848,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		g.Expect(err).To(HaveOccurred())
 		cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
 		g.Expect(cond).NotTo(BeNil())
-		g.Expect(cond.Reason).To(Equal(kcmv1.RBACPolicyPartiallyAppliedReason))
+		g.Expect(cond.Reason).To(Equal(kcmv1.RBACPolicyClusterUnreachableReason))
 	})
 
 	t.Run("a ClusterDeployment with no policy, grant or condition drops leftover sync status", func(t *testing.T) {
@@ -3904,7 +3904,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		g.Expect(cond.Reason).To(Equal(kcmv1.RBACPolicyNotFoundReason))
 	})
 
-	t.Run("a sync moves a grant recorded by an earlier release to the new marker", func(t *testing.T) {
+	t.Run("a sync records a grant from an earlier release in both markers", func(t *testing.T) {
 		g := NewWithT(t)
 		cd := newCD(policy.Name, "test-auth")
 		cd.UID = "legacy-grant-migrate-cd-uid"
@@ -3920,16 +3920,36 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		_, err := r.ensureRBACPolicy(t.Context(), &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: policy})
 		g.Expect(err).To(Succeed())
 		g.Expect(cd.Status.RBACPolicy.Grant).To(Equal(kcmv1.RBACPolicyGrantedState))
-		g.Expect(cd.Status.RBACPolicyGrant).To(BeEmpty()) //nolint:staticcheck // legacy marker under test
+		g.Expect(cd.Status.RBACPolicyGrant).To(Equal(kcmv1.RBACPolicyGrantedState)) //nolint:staticcheck // legacy marker under test
 
 		// persisted on its own, ahead of the end-of-reconcile status update
 		stored := &kcmv1.ClusterDeployment{}
 		g.Expect(mgmtCl.Get(t.Context(), crclient.ObjectKeyFromObject(cd), stored)).To(Succeed())
 		g.Expect(stored.Status.RBACPolicy.Grant).To(Equal(kcmv1.RBACPolicyGrantedState))
-		g.Expect(stored.Status.RBACPolicyGrant).To(BeEmpty()) //nolint:staticcheck // legacy marker under test
+		g.Expect(stored.Status.RBACPolicyGrant).To(Equal(kcmv1.RBACPolicyGrantedState)) //nolint:staticcheck // legacy marker under test
 	})
 
-	t.Run("a sync that reached the child cluster without changing it is partially applied", func(t *testing.T) {
+	t.Run("a new grant is also recorded in the legacy marker, so it survives a downgrade", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD(policy.Name, "test-auth")
+		cd.UID = "dual-grant-cd-uid"
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
+		r := &ClusterDeploymentReconciler{
+			MgmtClient: mgmtCl,
+			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+				return fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build(), nil
+			},
+		}
+
+		_, err := r.ensureRBACPolicy(t.Context(), &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: policy})
+		g.Expect(err).To(Succeed())
+		stored := &kcmv1.ClusterDeployment{}
+		g.Expect(mgmtCl.Get(t.Context(), crclient.ObjectKeyFromObject(cd), stored)).To(Succeed())
+		g.Expect(stored.Status.RBACPolicy.Grant).To(Equal(kcmv1.RBACPolicyGrantedState))
+		g.Expect(stored.Status.RBACPolicyGrant).To(Equal(kcmv1.RBACPolicyGrantedState)) //nolint:staticcheck // legacy marker under test
+	})
+
+	t.Run("a sync is unreachable when only its failed requests got no response, and skips the prune", func(t *testing.T) {
 		g := NewWithT(t)
 		cd := newCD(policy.Name, "test-auth")
 		cd.UID = "reached-unchanged-cd-uid"
@@ -3939,9 +3959,14 @@ func Test_ensureRBACPolicy(t *testing.T) {
 			Name: "viewers", ClusterRole: "view", Subjects: []kcmv1.RBACPolicySubject{{Kind: rbacv1.GroupKind, Name: "viewers"}},
 		})
 		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
+		lists := 0
 		childCl := fake.NewClientBuilder().
 			WithScheme(testscheme.Scheme).
 			WithInterceptorFuncs(interceptor.Funcs{
+				List: func(ctx context.Context, cl crclient.WithWatch, list crclient.ObjectList, opts ...crclient.ListOption) error {
+					lists++
+					return cl.List(ctx, list, opts...)
+				},
 				Create: func(ctx context.Context, cl crclient.WithWatch, obj crclient.Object, opts ...crclient.CreateOption) error {
 					if obj.GetName() == "k0rdent-viewers" {
 						return dialErr
@@ -3960,14 +3985,16 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		g.Expect(err).To(Succeed())
 
 		// the existing binding already matches, so nothing changes before the new one times out
+		lists = 0
 		_, err = r.ensureRBACPolicy(t.Context(), &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: twoBindings})
 		g.Expect(err).To(HaveOccurred())
 		cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
 		g.Expect(cond).NotTo(BeNil())
-		g.Expect(cond.Reason).To(Equal(kcmv1.RBACPolicyPartiallyAppliedReason))
+		g.Expect(cond.Reason).To(Equal(kcmv1.RBACPolicyClusterUnreachableReason))
+		g.Expect(lists).To(BeZero())
 	})
 
-	t.Run("a revoke whose prune listed the child cluster before timing out is partially applied", func(t *testing.T) {
+	t.Run("a revoke whose prune listed the child cluster before timing out is unreachable", func(t *testing.T) {
 		g := NewWithT(t)
 		cd := newCD("", "test-auth")
 		cd.Status.RBACPolicy = kcmv1.RBACPolicyStatus{Grant: kcmv1.RBACPolicyGrantedState}
@@ -3992,7 +4019,7 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		g.Expect(err).To(HaveOccurred())
 		cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
 		g.Expect(cond).NotTo(BeNil())
-		g.Expect(cond.Reason).To(Equal(kcmv1.RBACPolicyPartiallyAppliedReason))
+		g.Expect(cond.Reason).To(Equal(kcmv1.RBACPolicyClusterUnreachableReason))
 		g.Expect(rbacGranted(cd)).To(BeTrue())
 	})
 
@@ -4027,6 +4054,157 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		g.Expect(cond.Reason).To(Equal(kcmv1.FailedReason))
 		g.Expect(cd.Status.RBACPolicy.LastSyncTime).NotTo(BeNil())
 		g.Expect(rbacGranted(cd)).To(BeTrue())
+	})
+
+	for _, tc := range []struct {
+		name       string
+		withSecret bool
+		fails      func(crclient.Object) bool
+	}{
+		{
+			name: "the CAPI Cluster lookup",
+			fails: func(obj crclient.Object) bool {
+				p, ok := obj.(*metav1.PartialObjectMetadata)
+				return ok && p.Kind == clusterapiv1.ClusterKind
+			},
+		},
+		{
+			name:       "the control plane check",
+			withSecret: true,
+			fails: func(obj crclient.Object) bool {
+				_, ok := obj.(*clusterapiv1.Cluster)
+				return ok
+			},
+		},
+	} {
+		t.Run("a due resync of a granted cluster whose "+tc.name+" fails reports the failure", func(t *testing.T) {
+			g := NewWithT(t)
+			cd := newCD(policy.Name, "test-auth")
+			cd.UID = "sync-lookup-fails-cd-uid"
+			due := metav1.NewTime(time.Now().Add(-rbacResyncInterval * 2).Truncate(time.Second))
+			cd.Status.RBACPolicy = kcmv1.RBACPolicyStatus{
+				Grant: kcmv1.RBACPolicyGrantedState, SyncHash: rbacSyncHash(cd, policy),
+				LastAppliedTime: &due, LastSyncTime: &due,
+			}
+			setRBACPolicyReady(cd, policy)
+			objs := []crclient.Object{cd, capiCluster(cd.Name)}
+			if tc.withSecret {
+				objs = append(objs, kubeconfigSecret(cd.Name))
+			}
+			mgmtCl := fake.NewClientBuilder().
+				WithScheme(testscheme.Scheme).
+				WithStatusSubresource(&kcmv1.ClusterDeployment{}).
+				WithObjects(objs...).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Get: func(ctx context.Context, cl crclient.WithWatch, key crclient.ObjectKey, obj crclient.Object, opts ...crclient.GetOption) error {
+						if tc.fails(obj) {
+							return apierrors.NewServiceUnavailable("management API server unavailable")
+						}
+						return cl.Get(ctx, key, obj, opts...)
+					},
+				}).
+				Build()
+			r := &ClusterDeploymentReconciler{
+				MgmtClient: mgmtCl,
+				childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+					return fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build(), nil
+				},
+			}
+
+			_, err := r.ensureRBACPolicy(t.Context(), &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: policy})
+			g.Expect(err).To(HaveOccurred())
+			cond := meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
+			g.Expect(cond).NotTo(BeNil())
+			g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(cond.Reason).To(Equal(kcmv1.FailedReason))
+			g.Expect(cd.Status.RBACPolicy.LastSyncTime.After(due.Time)).To(BeTrue())
+			g.Expect(cd.Status.RBACPolicy.LastAppliedTime).To(Equal(&due))
+		})
+	}
+
+	t.Run("a retry failing for the same reason with a new message leaves status alone", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD(policy.Name, "test-auth")
+		cd.UID = "retry-new-message-cd-uid"
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
+		port := 40000
+		// a connection reset names a new ephemeral source port every time
+		reset := func() error {
+			port++
+			return &url.Error{Op: "Get", URL: "https://child:6443", Err: fmt.Errorf("read tcp 10.0.0.1:%d->10.0.0.2:6443: read: connection reset by peer", port)}
+		}
+		childCl := fake.NewClientBuilder().
+			WithScheme(testscheme.Scheme).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Get: func(context.Context, crclient.WithWatch, crclient.ObjectKey, crclient.Object, ...crclient.GetOption) error {
+					return reset()
+				},
+				List: func(context.Context, crclient.WithWatch, crclient.ObjectList, ...crclient.ListOption) error {
+					return reset()
+				},
+			}).
+			Build()
+		r := &ClusterDeploymentReconciler{
+			MgmtClient: mgmtCl,
+			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+				return childCl, nil
+			},
+		}
+		scope := &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: policy}
+
+		_, err := r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(HaveOccurred())
+		before := cd.Status.DeepCopy()
+
+		_, err = r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).NotTo(Equal(meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition).Message))
+		g.Expect(cd.Status).To(Equal(*before))
+	})
+
+	t.Run("a resync request always records a new attempt, whether the sync succeeds or not", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD(policy.Name, "test-auth")
+		cd.UID = "resync-echo-cd-uid"
+		cd.Annotations = map[string]string{kcmv1.RBACPolicyResyncAnnotation: "req-1"}
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
+		var childCl crclient.Client = fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build()
+		r := &ClusterDeploymentReconciler{
+			MgmtClient: mgmtCl,
+			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+				return childCl, nil
+			},
+		}
+		scope := &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: policy}
+
+		// the signal a client waits on: syncHash changes and lastSyncTime advances
+		requested := func(value string) (string, *metav1.Time) {
+			prev := metav1.NewTime(time.Now().Add(-time.Minute).Truncate(time.Second))
+			cd.Status.RBACPolicy.LastSyncTime = &prev
+			hash := cd.Status.RBACPolicy.SyncHash
+			cd.Annotations[kcmv1.RBACPolicyResyncAnnotation] = value
+			return hash, &prev
+		}
+
+		_, err := r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(Succeed())
+
+		// a successful sync
+		hash, prev := requested("req-2")
+		_, err = r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(Succeed())
+		g.Expect(cd.Status.RBACPolicy.SyncHash).NotTo(Equal(hash))
+		g.Expect(cd.Status.RBACPolicy.LastSyncTime.After(prev.Time)).To(BeTrue())
+
+		// a failing one, then a request while it keeps failing the same way within the interval
+		childCl = failingChild(dialErr)
+		for _, v := range []string{"req-3", "req-4"} {
+			hash, prev = requested(v)
+			_, err = r.ensureRBACPolicy(t.Context(), scope)
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(cd.Status.RBACPolicy.SyncHash).NotTo(Equal(hash))
+			g.Expect(cd.Status.RBACPolicy.LastSyncTime.After(prev.Time)).To(BeTrue())
+		}
 	})
 
 	t.Run("each successful resync advances the last applied time but not the condition", func(t *testing.T) {
@@ -4746,6 +4924,51 @@ func Test_releaseProviderCluster(t *testing.T) {
 			if !slices.Equal(gotFin, wantFin) {
 				t.Errorf("finalizers mismatch: got %v, want %v", got.GetFinalizers(), tt.wantFinalizers)
 			}
+		})
+	}
+}
+
+func Test_onlyRBACSyncTimesChanged(t *testing.T) {
+	t1, t2 := metav1.NewTime(time.Unix(1000, 0)), metav1.NewTime(time.Unix(2000, 0))
+	base := &kcmv1.ClusterDeployment{Name: "cd", Namespace: "ns", ResourceVersion: "1"}
+	base.Status.RBACPolicy = kcmv1.RBACPolicyStatus{Grant: kcmv1.RBACPolicyGrantedState, LastAppliedTime: &t1, LastSyncTime: &t1}
+	resynced := func(mutate func(*kcmv1.ClusterDeployment)) *kcmv1.ClusterDeployment {
+		cd := base.DeepCopy()
+		cd.ResourceVersion = "2"
+		cd.Status.RBACPolicy.LastAppliedTime = &t2
+		cd.Status.RBACPolicy.LastSyncTime = &t2
+		if mutate != nil {
+			mutate(cd)
+		}
+		return cd
+	}
+
+	for _, tc := range []struct {
+		name string
+		new  *kcmv1.ClusterDeployment
+		want bool
+	}{
+		{name: "a periodic resync's status write is dropped", new: resynced(nil), want: true},
+		{name: "a failed attempt refreshing only lastSyncTime is dropped", new: func() *kcmv1.ClusterDeployment {
+			cd := base.DeepCopy()
+			cd.ResourceVersion = "2"
+			cd.Status.RBACPolicy.LastSyncTime = &t2
+			return cd
+		}(), want: true},
+		{name: "a write that changes something else as well is kept", new: resynced(func(cd *kcmv1.ClusterDeployment) {
+			cd.Status.Conditions = []metav1.Condition{{Type: kcmv1.ReadyCondition, Status: metav1.ConditionFalse}}
+		}), want: false},
+		{name: "a resync request is kept", new: resynced(func(cd *kcmv1.ClusterDeployment) {
+			cd.Annotations = map[string]string{kcmv1.RBACPolicyResyncAnnotation: "1"}
+		}), want: false},
+		{name: "an update that leaves the times alone is kept", new: func() *kcmv1.ClusterDeployment {
+			cd := base.DeepCopy()
+			cd.ResourceVersion = "2"
+			return cd
+		}(), want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			NewWithT(t).Expect(onlyRBACSyncTimesChanged(base, tc.new)).To(Equal(tc.want))
 		})
 	}
 }

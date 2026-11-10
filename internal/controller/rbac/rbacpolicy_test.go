@@ -503,33 +503,37 @@ func TestSyncRoleRefChangeReportsDeleteOnFailedCreate(t *testing.T) {
 	g.Expect(changed).To(BeTrue())
 }
 
-func TestReachTracker(t *testing.T) {
+func TestSyncStopsAtFirstUnreachableRequest(t *testing.T) {
 	g := NewWithT(t)
 
-	dial := &url.Error{Op: "Get", URL: "https://child:6443", Err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}}
-	failWith := func(err error) client.Client {
+	dial := &url.Error{Op: "Post", URL: "https://child:6443", Err: &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}}
+	forbidden := apierrors.NewForbidden(rbacv1.Resource("clusterrolebindings"), "x", errors.New("denied"))
+	var creates []string
+	createFails := func(err error) client.Client {
+		creates = nil
 		return fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithInterceptorFuncs(interceptor.Funcs{
-			Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
+			Create: func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.CreateOption) error {
+				creates = append(creates, obj.GetName())
 				return err
 			},
 		}).Build()
 	}
-	get := func(cl client.Client) {
-		_ = cl.Get(t.Context(), client.ObjectKey{Name: "x"}, &rbacv1.ClusterRole{})
-	}
+	policy := &kcmv1.RBACPolicy{Spec: kcmv1.RBACPolicySpec{Bindings: []kcmv1.RBACPolicyBinding{
+		{Name: "a", ClusterRole: "view", Subjects: []kcmv1.RBACPolicySubject{{Kind: rbacv1.GroupKind, Name: "g"}}},
+		{Name: "b", ClusterRole: "edit", Subjects: []kcmv1.RBACPolicySubject{{Kind: rbacv1.GroupKind, Name: "g"}}},
+	}}}
 
-	// a transport failure gets no response
-	tracked := TrackReach(failWith(dial))
-	get(tracked)
-	g.Expect(tracked.Reached()).To(BeFalse())
+	// a request with no response ends the attempt
+	desiredRoles, desiredBindings, _, err := Sync(t.Context(), createFails(dial), policy)
+	g.Expect(Unreachable(err)).To(BeTrue())
+	g.Expect(creates).To(ConsistOf(kcmv1.ClusterRoleBindingNamePrefix + "a"))
+	// everything stays desired, so a later Prune keeps what was not reached
+	g.Expect(desiredBindings).To(HaveLen(2))
+	g.Expect(desiredRoles).To(HaveLen(2))
 
-	// an error status is a response
-	tracked = TrackReach(failWith(apierrors.NewForbidden(rbacv1.Resource("clusterroles"), "x", errors.New("denied"))))
-	get(tracked)
-	g.Expect(tracked.Reached()).To(BeTrue())
-
-	// and so is NotFound, the answer a no-op lookup gets
-	tracked = TrackReach(fake.NewClientBuilder().WithScheme(testscheme.Scheme).Build())
-	get(tracked)
-	g.Expect(tracked.Reached()).To(BeTrue())
+	// a refusal does not
+	_, _, changed, err := Sync(t.Context(), createFails(forbidden), policy)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(changed).To(BeFalse())
+	g.Expect(creates).To(HaveLen(2))
 }

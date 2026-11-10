@@ -1150,12 +1150,10 @@ func (r *ClusterDeploymentReconciler) ensureAuditPolicyConfigMap(ctx context.Con
 	return nil
 }
 
-// rbacResyncInterval is how often the RBAC objects are re-synced to catch drift, since nothing
-// watches the child cluster for it.
+// rbacResyncInterval is the RBAC drift resync period.
 const rbacResyncInterval = 5 * time.Minute
 
-// rbacResyncIn returns cd's resync interval, jittered by up to ±10% per ClusterDeployment so that
-// they don't all resync in the same phase.
+// rbacResyncIn returns cd's resync interval with a stable ±10% jitter.
 func rbacResyncIn(cd *kcmv1.ClusterDeployment) time.Duration {
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(cd.UID))
@@ -1163,16 +1161,14 @@ func rbacResyncIn(cd *kcmv1.ClusterDeployment) time.Duration {
 	return time.Duration(float64(rbacResyncInterval) * (0.9 + 0.2*frac))
 }
 
-// rbacSyncHash identifies what a sync of policy to cd applies: the policy revision and the
-// resync request.
+// rbacSyncHash hashes the policy revision and cd's resync request.
 func rbacSyncHash(cd *kcmv1.ClusterDeployment, policy *kcmv1.RBACPolicy) string {
 	h := fnv.New64a()
 	_, _ = fmt.Fprintf(h, "%s\x00%d\x00%s", policy.UID, policy.Generation, cd.Annotations[kcmv1.RBACPolicyResyncAnnotation])
 	return strconv.FormatUint(h.Sum64(), 16)
 }
 
-// rbacSyncFresh returns the time left until policy is due a resync to cd, and whether the sync can
-// be skipped until then: the last attempt synced the same hash and succeeded.
+// rbacSyncFresh returns the time until the next resync and whether hash was synced successfully.
 func rbacSyncFresh(cd *kcmv1.ClusterDeployment, hash string) (time.Duration, bool) {
 	st := cd.Status.RBACPolicy
 	if st.SyncHash != hash || st.LastAppliedTime == nil ||
@@ -1207,21 +1203,22 @@ func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scop
 		return ctrl.Result{RequeueAfter: left}, nil
 	}
 
+	// Every failure from here on is a failed attempt of hash.
+	syncFailed := func(reason string, err error) error {
+		r.reportRBACFailure(cd, hash, reason, "RBACSyncFailed", err)
+		return err
+	}
+
 	childCl, _, err := r.childClientFor(ctx, scope.rgnClient, cd)
 	if err != nil {
-		err = fmt.Errorf("failed to get child cluster client: %w", err)
-		markRBACSyncFailed(cd, hash)
-		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
-			r.warnf(cd, "RBACSyncFailed", err.Error())
-		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, syncFailed(kcmv1.FailedReason, fmt.Errorf("failed to get child cluster client: %w", err))
 	}
 	if childCl == nil {
 		// No kubeconfig Secret yet. With no CAPI Cluster either (e.g. an adopted cluster) there
 		// never will be one, so opt out rather than requeue forever.
 		capiCluster, err := r.getPartialCapiCluster(ctx, scope.rgnClient, cd)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to check for CAPI Cluster: %w", err)
+			return ctrl.Result{}, syncFailed(kcmv1.FailedReason, fmt.Errorf("failed to check for CAPI Cluster: %w", err))
 		}
 		if capiCluster == nil {
 			l.V(1).Info("No CAPI Cluster and no child kubeconfig, skipping RBACPolicy sync", "RBACPolicy", scope.rbacPolicy.Name)
@@ -1230,10 +1227,7 @@ func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scop
 
 		// Already granted, so the cluster had a kubeconfig and lost it, rather than still provisioning.
 		if rbacGranted(cd) {
-			markRBACSyncFailed(cd, hash)
-			if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.RBACPolicyClusterUnreachableReason, metav1.ConditionFalse, errors.New("child cluster kubeconfig not available")) {
-				r.warnf(cd, "RBACSyncFailed", "child cluster kubeconfig not available, retrying")
-			}
+			_ = syncFailed(kcmv1.RBACPolicyClusterUnreachableReason, errors.New("child cluster kubeconfig not available"))
 			return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 		}
 
@@ -1248,7 +1242,7 @@ func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scop
 	// The kubeconfig Secret appears before the API server is reachable, so wait for the control plane.
 	initialized, err := r.capiControlPlaneInitialized(ctx, scope.rgnClient, cd)
 	if err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, syncFailed(kcmv1.FailedReason, err)
 	}
 	if !initialized {
 		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.ProgressingReason, metav1.ConditionUnknown, errors.New("child cluster control plane not initialized yet")) {
@@ -1263,28 +1257,26 @@ func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scop
 	// — is gone. A marker written afterwards would be missing for precisely the objects a crash
 	// part-way through this sync left behind.
 	if err := r.markRBACGranted(ctx, cd); err != nil {
-		markRBACSyncFailed(cd, hash)
-		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, kcmv1.FailedReason, metav1.ConditionFalse, err) {
-			r.warnf(cd, "RBACSyncFailed", err.Error())
-		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, syncFailed(kcmv1.FailedReason, err)
 	}
 
-	tracked := rbac.TrackReach(childCl)
-	desiredRoles, desiredBindings, syncChanged, syncErr := rbac.Sync(ctx, tracked, scope.rbacPolicy)
-	pruneChanged, pruneErr := rbac.Prune(ctx, tracked, desiredRoles, desiredBindings)
+	desiredRoles, desiredBindings, syncChanged, syncErr := rbac.Sync(ctx, childCl, scope.rbacPolicy)
+	var (
+		pruneChanged bool
+		pruneErr     error
+	)
+	// Sync stops at the first request that got no response; a Prune after it would only wait out
+	// another dial timeout against the same dead endpoint.
+	if !rbac.Unreachable(syncErr) {
+		pruneChanged, pruneErr = rbac.Prune(ctx, childCl, desiredRoles, desiredBindings)
+	}
 	if joined := errors.Join(syncErr, pruneErr); joined != nil {
 		retriable := rbac.Retriable(joined)
-		err := fmt.Errorf("failed to sync RBAC objects: %w", joined)
-		// Sync deliberately continues past a failing binding, so this reports False over access
+		// Sync deliberately continues past a refused binding, so this reports False over access
 		// that is partly real — which is what the Reason says. status.rbacPolicy.grant, set before
 		// the sync, is what keeps the revoke honest; the condition only has to describe what
 		// happened.
-		markRBACSyncFailed(cd, hash)
-		reason := rbacFailureReason(tracked, joined)
-		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, reason, metav1.ConditionFalse, err) {
-			r.warnf(cd, "RBACSyncFailed", err.Error())
-		}
+		err := syncFailed(rbacFailureReason(joined), fmt.Errorf("failed to sync RBAC objects: %w", joined))
 		if !retriable {
 			// Only an RBACPolicy edit can clear this, so don't burn the rate limiter — but keep
 			// the drift resync, since one bad binding must not stop repairing the others.
@@ -1310,8 +1302,34 @@ func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scop
 	return ctrl.Result{RequeueAfter: time.Until(syncedAt.Add(rbacResyncIn(cd)))}, nil
 }
 
-// setRBACPolicyReady marks policy fully live in cd's child cluster. The generation also goes in
-// the message so the condition changes when the policy does.
+// onlyRBACSyncTimesChanged reports whether an update only changed the RBAC sync timestamps.
+func onlyRBACSyncTimesChanged(oldObj, newObj client.Object) bool {
+	oldCD, ok := oldObj.(*kcmv1.ClusterDeployment)
+	if !ok {
+		return false
+	}
+	newCD, ok := newObj.(*kcmv1.ClusterDeployment)
+	if !ok {
+		return false
+	}
+	oldSt, newSt := oldCD.Status.RBACPolicy, newCD.Status.RBACPolicy
+	if equality.Semantic.DeepEqual(oldSt.LastAppliedTime, newSt.LastAppliedTime) &&
+		equality.Semantic.DeepEqual(oldSt.LastSyncTime, newSt.LastSyncTime) {
+		return false
+	}
+
+	strip := func(cd *kcmv1.ClusterDeployment) *kcmv1.ClusterDeployment {
+		cd = cd.DeepCopy()
+		cd.ResourceVersion = ""
+		cd.ManagedFields = nil
+		cd.Status.RBACPolicy.LastAppliedTime = nil
+		cd.Status.RBACPolicy.LastSyncTime = nil
+		return cd
+	}
+	return equality.Semantic.DeepEqual(strip(oldCD), strip(newCD))
+}
+
+// setRBACPolicyReady marks policy as applied to cd's child cluster.
 func setRBACPolicyReady(cd *kcmv1.ClusterDeployment, policy *kcmv1.RBACPolicy) {
 	apimeta.SetStatusCondition(cd.GetConditions(), metav1.Condition{
 		Type:               kcmv1.RBACPolicyReadyCondition,
@@ -1322,56 +1340,54 @@ func setRBACPolicyReady(cd *kcmv1.ClusterDeployment, policy *kcmv1.RBACPolicy) {
 	})
 }
 
-// rbacStatus returns cd's RBACPolicy status for update.
+// rbacStatus returns a pointer to cd's RBACPolicy status.
 func rbacStatus(cd *kcmv1.ClusterDeployment) *kcmv1.RBACPolicyStatus {
 	return &cd.Status.RBACPolicy
 }
 
-// markRBACSyncFailed records a failed sync or revoke attempt of hash; call it before the condition
-// is updated. Every status write requeues cd at once, bypassing backoff, so a retry of an already
-// failed hash refreshes lastSyncTime at most once per rbacResyncInterval.
-func markRBACSyncFailed(cd *kcmv1.ClusterDeployment, hash string) {
+// reportRBACFailure records a failed sync (hash set) or revoke (hash empty) in status. A retry
+// failing the same way within rbacResyncInterval changes nothing, since a status write would
+// requeue cd and bypass the error backoff.
+func (r *ClusterDeploymentReconciler) reportRBACFailure(cd *kcmv1.ClusterDeployment, hash, reason, eventReason string, err error) {
 	st := rbacStatus(cd)
-	retry := st.SyncHash == hash && !apimeta.IsStatusConditionTrue(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
-	st.SyncHash = hash
+	cond := apimeta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
+	retry := st.SyncHash == hash && cond != nil && cond.Status == metav1.ConditionFalse && cond.Reason == reason
 	if retry && st.LastSyncTime != nil && time.Since(st.LastSyncTime.Time) < rbacResyncInterval {
 		return
 	}
+
+	st.SyncHash = hash
 	now := metav1.Now().Rfc3339Copy()
 	st.LastSyncTime = &now
+	if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, reason, metav1.ConditionFalse, err) {
+		r.warnf(cd, eventReason, err.Error())
+	}
 }
 
-// rbacGranted reports whether objects created from an RBACPolicy may be live in cd's child cluster.
-// The deprecated status.rbacPolicyGrant counts too: it is the only record of a grant made before
-// an upgrade, and dropping it would skip the prune of whatever that grant left live.
+// rbacGranted reports whether RBAC objects may be live in cd's child cluster, by either marker.
 func rbacGranted(cd *kcmv1.ClusterDeployment) bool {
 	return cd.Status.RBACPolicy.Grant == kcmv1.RBACPolicyGrantedState ||
 		cd.Status.RBACPolicyGrant == kcmv1.RBACPolicyGrantedState //nolint:staticcheck // legacy marker, read until migrated
 }
 
-// clearRBACStatus resets cd's RBACPolicy status, the deprecated grant marker included, once
-// nothing created from an RBACPolicy is live in the child cluster any more.
+// clearRBACStatus resets cd's RBACPolicy status, both grant markers included.
 func clearRBACStatus(cd *kcmv1.ClusterDeployment) {
 	cd.Status.RBACPolicy = kcmv1.RBACPolicyStatus{}
 	cd.Status.RBACPolicyGrant = "" //nolint:staticcheck // legacy marker, cleared together with its successor
 }
 
-// rbacFailureReason tells an unreachable child cluster apart from one that refused the change:
-// only when no request through tracked got any response from its API server is it reported
-// unreachable.
-func rbacFailureReason(tracked *rbac.ReachTracker, err error) string {
-	if !tracked.Reached() && rbac.Unreachable(err) {
+// rbacFailureReason returns the RBACPolicyReady reason for a failed sync or revoke.
+func rbacFailureReason(err error) string {
+	if rbac.Unreachable(err) {
 		return kcmv1.RBACPolicyClusterUnreachableReason
 	}
 	return kcmv1.RBACPolicyPartiallyAppliedReason
 }
 
-// markRBACGranted persists status.rbacPolicy.grant, the record that revokeRBACPolicy has something
-// to prune in cd's child cluster. Written on its own rather than with the rest of the status,
-// which lands well after [rbac.Sync] has already written there. A legacy status.rbacPolicyGrant is
-// moved over in the same patch, so the grant is never unrecorded. A no-op once migrated and set.
+// markRBACGranted persists both grant markers before anything is written to the child cluster.
+// The deprecated one keeps the grant visible to a downgraded controller.
 func (r *ClusterDeploymentReconciler) markRBACGranted(ctx context.Context, cd *kcmv1.ClusterDeployment) error {
-	if rbacStatus(cd).Grant == kcmv1.RBACPolicyGrantedState && cd.Status.RBACPolicyGrant == "" { //nolint:staticcheck // legacy marker migration
+	if rbacStatus(cd).Grant == kcmv1.RBACPolicyGrantedState && cd.Status.RBACPolicyGrant == kcmv1.RBACPolicyGrantedState { //nolint:staticcheck // legacy marker, kept for downgrades
 		return nil
 	}
 
@@ -1379,20 +1395,17 @@ func (r *ClusterDeploymentReconciler) markRBACGranted(ctx context.Context, cd *k
 	// earlier in this reconcile, so only the grant and resourceVersion are taken back.
 	patched := cd.DeepCopy()
 	rbacStatus(patched).Grant = kcmv1.RBACPolicyGrantedState
-	patched.Status.RBACPolicyGrant = "" //nolint:staticcheck // legacy marker migration
+	patched.Status.RBACPolicyGrant = kcmv1.RBACPolicyGrantedState //nolint:staticcheck // legacy marker, kept for downgrades
 	if err := r.MgmtClient.Status().Patch(ctx, patched, client.MergeFrom(cd)); err != nil {
 		return fmt.Errorf("failed to record the RBAC grant on ClusterDeployment %s: %w", client.ObjectKeyFromObject(cd), err)
 	}
 	rbacStatus(cd).Grant = kcmv1.RBACPolicyGrantedState
-	cd.Status.RBACPolicyGrant = "" //nolint:staticcheck // legacy marker migration
+	cd.Status.RBACPolicyGrant = kcmv1.RBACPolicyGrantedState //nolint:staticcheck // legacy marker, kept for downgrades
 	cd.ResourceVersion = patched.ResourceVersion
 	return nil
 }
 
-// revokeRBACPolicy removes everything [rbac.Sync] previously created in cd's child cluster, once
-// spec.rbacPolicy is cleared or the RBACPolicy it names is gone. status.rbacPolicy.grant survives
-// for as long as anything may still be granted, so a failed revoke is retried rather than being
-// written off after one attempt.
+// revokeRBACPolicy removes all RBAC objects from cd's child cluster, retrying until it succeeds.
 func (r *ClusterDeploymentReconciler) revokeRBACPolicy(ctx context.Context, scope *clusterScope) error {
 	cd := scope.cd
 	conds := cd.GetConditions()
@@ -1429,10 +1442,7 @@ func (r *ClusterDeploymentReconciler) revokeRBACPolicy(ctx context.Context, scop
 		if !granted {
 			return err
 		}
-		markRBACSyncFailed(cd, "")
-		if r.setCondition(cd, kcmv1.RBACPolicyReadyCondition, reason, metav1.ConditionFalse, err) {
-			r.warnf(cd, "RBACRevokeFailed", err.Error())
-		}
+		r.reportRBACFailure(cd, "", reason, "RBACRevokeFailed", err)
 		return err
 	}
 
@@ -1455,9 +1465,8 @@ func (r *ClusterDeploymentReconciler) revokeRBACPolicy(ctx context.Context, scop
 			return revokeFailed(kcmv1.RBACPolicyClusterUnreachableReason, errors.New("child cluster kubeconfig not available, cannot revoke RBAC objects yet"))
 		}
 	} else {
-		tracked := rbac.TrackReach(childCl)
-		if _, err := rbac.Prune(ctx, tracked, nil, nil); err != nil {
-			return revokeFailed(rbacFailureReason(tracked, err), fmt.Errorf("failed to revoke RBAC objects: %w", err))
+		if _, err := rbac.Prune(ctx, childCl, nil, nil); err != nil {
+			return revokeFailed(rbacFailureReason(err), fmt.Errorf("failed to revoke RBAC objects: %w", err))
 		}
 	}
 	// Nothing of ours is left in the child cluster. Unlike markRBACGranted this rides the
@@ -2697,7 +2706,11 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithOptions(controller.TypedOptions[ctrl.Request]{
 			RateLimiter: ratelimitutil.DefaultFastSlow(),
 		}).
-		For(&kcmv1.ClusterDeployment{}).
+		For(&kcmv1.ClusterDeployment{}, builder.WithPredicates(predicate.Funcs{
+			// The periodic RBAC resync's own status write would otherwise come back as a full
+			// reconcile that has nothing to do; its RequeueAfter already schedules the next one.
+			UpdateFunc: func(e event.UpdateEvent) bool { return !onlyRBACSyncTimesChanged(e.ObjectOld, e.ObjectNew) },
+		})).
 		Owns(&kcmv1.ClusterDataSource{}, builder.WithPredicates(predicate.Funcs{
 			GenericFunc: func(event.TypedGenericEvent[client.Object]) bool { return false },
 			CreateFunc:  func(event.TypedCreateEvent[client.Object]) bool { return false },
