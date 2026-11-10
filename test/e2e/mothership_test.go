@@ -22,6 +22,7 @@ import (
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -69,6 +70,15 @@ var _ = Context("Mothership Cluster", Label("mothership"), func() {
 			afterAllDeleteFuncs = append(afterAllDeleteFuncs, fn)
 
 			fn = templates.CreateServiceTemplateWithDelete(ctx, kc.CrClient, kubeutil.CurrentNamespace(), "postgres-operator-1-14-0", kcmv1.ServiceTemplateSpec{
+				// Uninstalling the chart leaves its CRDs behind, and postgres-operator chart
+				// creates the postgresqls CRD once it runs. The default behavior since Sveltos 1.17.0
+				// is to Fail an installation if the CRDs it creates already exist.
+				// Therefore, using Skip here to skip creating the CRDs and let the installation continue.
+				HelmOptions: &kcmv1.ServiceHelmOptions{
+					InstallOptions: &addoncontrollerv1beta1.HelmInstallOptions{
+						ExistingCRDs: addoncontrollerv1beta1.ExistingCRDsPolicySkip,
+					},
+				},
 				Helm: &kcmv1.HelmSpec{
 					ChartSpec: &sourcev1.HelmChartSpec{
 						Chart:   "postgres-operator",
