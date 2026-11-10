@@ -75,6 +75,13 @@ spec:
                     containing audit policy configuration.
                   minLength: 1
                   type: string
+                certificateAuthority:
+                  description: |-
+                    certificateAuthority is the name reference to the related [ClusterCertificateAuthority]
+                    object located in the same namespace, supplying custom CAs for cluster bootstrapping.
+                  maxLength: 256
+                  minLength: 1
+                  type: string
                 cleanupOnDeletion:
                   description: |-
                     cleanupOnDeletion specifies whether potentially orphaned Services and PVCs

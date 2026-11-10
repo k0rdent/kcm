@@ -197,7 +197,7 @@ func TestClusterAuthenticationValidateCreate(t *testing.T) {
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
 				Build()
-			validator := &ClusterAuthenticationValidator{Client: c}
+			validator := NewClusterAuthenticationValidator(c)
 			warn, err := validator.ValidateCreate(ctx, tt.clAuth)
 			if tt.err != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -283,7 +283,7 @@ func TestClusterAuthenticationValidateUpdate(t *testing.T) {
 				WithScheme(scheme.Scheme).
 				WithRuntimeObjects(tt.existingObjects...).
 				Build()
-			validator := &ClusterAuthenticationValidator{Client: c}
+			validator := NewClusterAuthenticationValidator(c)
 			warn, err := validator.ValidateUpdate(ctx, nil, tt.newClAuth)
 			if tt.err != "" {
 				g.Expect(err).To(HaveOccurred())
@@ -297,7 +297,6 @@ func TestClusterAuthenticationValidateUpdate(t *testing.T) {
 	}
 }
 
-//nolint:dupl
 func TestClusterAuthenticationDelete(t *testing.T) {
 	g := NewWithT(t)
 
@@ -350,7 +349,7 @@ func TestClusterAuthenticationDelete(t *testing.T) {
 				WithRuntimeObjects(tt.existingObjects...).
 				WithIndex(&kcmv1.ClusterDeployment{}, kcmv1.ClusterDeploymentAuthenticationIndexKey, kcmv1.ExtractClusterAuthenticationNameFromClusterDeployment).
 				Build()
-			validator := &ClusterAuthenticationValidator{Client: c}
+			validator := NewClusterAuthenticationValidator(c)
 			_, err := validator.ValidateDelete(ctx, tt.clAuth)
 			if tt.err != "" {
 				g.Expect(err).To(HaveOccurred())

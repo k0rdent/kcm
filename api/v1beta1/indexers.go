@@ -35,6 +35,7 @@ func SetupIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		setupClusterDeploymentCredentialIndexer,
 		setupClusterDeploymentAuthenticationIndexer,
 		setupClusterDeploymentAuditPolicyIndexer,
+		setupClusterDeploymentCertificateAuthorityIndexer,
 		setupClusterDeploymentRBACPolicyIndexer,
 		setupReleaseVersionIndexer,
 		setupReleaseTemplatesIndexer,
@@ -280,6 +281,24 @@ func ExtractClusterAuditPolicyNameFromClusterDeployment(rawObj client.Object) []
 	}
 
 	return []string{cluster.Spec.AuditPolicy}
+}
+
+// ClusterDeploymentCertificateAuthorityIndexKey indexer field name to extract ClusterCertificateAuthority name reference from a ClusterDeployment object.
+const ClusterDeploymentCertificateAuthorityIndexKey = ".spec.certificateAuthority"
+
+func setupClusterDeploymentCertificateAuthorityIndexer(ctx context.Context, mgr ctrl.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(ctx, &ClusterDeployment{}, ClusterDeploymentCertificateAuthorityIndexKey, ExtractClusterCertificateAuthorityNameFromClusterDeployment)
+}
+
+// ExtractClusterCertificateAuthorityNameFromClusterDeployment returns referenced [ClusterCertificateAuthority] name
+// declared in a ClusterDeployment object.
+func ExtractClusterCertificateAuthorityNameFromClusterDeployment(rawObj client.Object) []string {
+	cluster, ok := rawObj.(*ClusterDeployment)
+	if !ok || cluster.Spec.CertificateAuthority == "" {
+		return nil
+	}
+
+	return []string{cluster.Spec.CertificateAuthority}
 }
 
 // ClusterDeploymentRBACPolicyIndexKey indexer field name to extract RBACPolicy name reference from a ClusterDeployment object.
