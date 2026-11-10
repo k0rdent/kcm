@@ -31,8 +31,10 @@ var segmentToken = "" // segmentToken variable is set via the linker flags
 type Config struct {
 	// ParentClient is the client from the current (local) cluster, that is either
 	// a regional or the management cluster.
-	ParentClient    client.Client
-	DirectReader    client.Reader // WARN: need once during the init; used to by-pass cache before the Start()
+	ParentClient client.Client
+	// DirectReader by-passes the cache: during the init before the Start(), and to page
+	// through the parent cluster data, which the cache cannot serve.
+	DirectReader    client.Reader
 	Mode            Mode
 	SystemNamespace string
 	LocalBaseDir    string

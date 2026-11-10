@@ -43,6 +43,7 @@ import (
 type SegmentIO struct {
 	segmentCl     analytics.Client
 	parentClient  client.Client
+	parentReader  client.Reader // uncached, the parent cluster data is read page by page
 	childScheme   *runtime.Scheme
 	childFactory  func([]byte, *runtime.Scheme) (client.Client, error)
 	extractor     *CELExtractor
@@ -55,6 +56,7 @@ type SegmentIO struct {
 func NewSegmentIO(
 	segmentClient analytics.Client,
 	parentClient client.Client,
+	parentReader client.Reader,
 	concurrency int,
 	extraResource string,
 	celExpression string,
@@ -69,9 +71,14 @@ func NewSegmentIO(
 		return nil, fmt.Errorf("creating CEL extractor: %w", err)
 	}
 
+	if parentReader == nil {
+		parentReader = parentClient
+	}
+
 	return &SegmentIO{
 		segmentCl:     segmentClient,
 		parentClient:  parentClient,
+		parentReader:  parentReader,
 		childScheme:   childScheme,
 		concurrency:   concurrency,
 		childFactory:  kubeutil.DefaultClientFactory,
@@ -118,7 +125,7 @@ func (t *SegmentIO) Collect(ctx context.Context) error {
 		return fmt.Errorf("failed to get current scope: %w", err)
 	}
 
-	if err := parentData.fetch(ctx, t.parentClient, dataScope); err != nil {
+	if err := parentData.fetch(ctx, t.parentReader, dataScope); err != nil {
 		return fmt.Errorf("failed to fetch data from parent cluster: %w", err)
 	}
 

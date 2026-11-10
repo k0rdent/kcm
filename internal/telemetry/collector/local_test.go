@@ -435,7 +435,7 @@ func Test_localCollector_Collect(t *testing.T) {
 			}
 
 			dir := t.TempDir()
-			lc, err := NewLocalCollector(mgmtClient, dir, 1)
+			lc, err := NewLocalCollector(mgmtClient, nil, dir, 1)
 			reqs.NoError(err)
 			lc.childFactory = fakeFactory
 

@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 const (
@@ -767,14 +768,65 @@ func collectVerdicts(
 		seen := make(map[client.ObjectKey]struct{})
 
 		for _, labelKey := range discoveryLabels {
-			list := &unstructured.UnstructuredList{}
-			list.SetGroupVersionKind(*listGVK)
-
 			opts := []client.ListOption{client.MatchingLabels{labelKey: serviceName}}
 			if actualScope == scopeNamespaced {
 				opts = append(opts, client.InNamespace(serviceNamespace))
 			}
-			if err := childClient.List(ctx, list, opts...); err != nil {
+
+			// the child cluster is read through an uncached client, so the objects are
+			// fetched and evaluated page by page instead of all at once
+			err := kubeutil.EachPage(ctx, childClient, func() *unstructured.UnstructuredList {
+				list := &unstructured.UnstructuredList{}
+				list.SetGroupVersionKind(*listGVK)
+				return list
+			}, func(page *unstructured.UnstructuredList) (bool, error) {
+				for i := range page.Items {
+					obj := &page.Items[i]
+					key := client.ObjectKey{Namespace: obj.GetNamespace(), Name: obj.GetName()}
+					if _, dup := seen[key]; dup {
+						continue
+					}
+					seen[key] = struct{}{}
+
+					verdict := resourceVerdict{
+						GVK:       *listGVK,
+						Name:      obj.GetName(),
+						Namespace: obj.GetNamespace(),
+						Healthy:   true,
+					}
+					verdict.GVK.Kind = gk.Kind // strip the "List" suffix
+
+					if obj.GetDeletionTimestamp() != nil {
+						verdicts = append(verdicts, verdict)
+						continue
+					}
+
+					// Build the CEL activation once per object; every rule
+					// for this Kind reuses it.
+					activation := objActivation{obj: obj.Object}
+
+					// Evaluate every rule registered for this GroupKind. First
+					// failure wins; we record its message + source.
+					for _, rule := range gkRules {
+						healthy, reason, evalErr := rule.evaluate(activation)
+						if evalErr != nil {
+							listErrs = errors.Join(listErrs, fmt.Errorf("evaluate %s %s/%s (rule %s): %w", gk, obj.GetNamespace(), obj.GetName(), rule.Source, evalErr))
+							continue
+						}
+						if !healthy {
+							verdict.Healthy = false
+							verdict.Reason = reason
+							verdict.RuleSrc = rule.Source
+							break
+						}
+					}
+
+					verdicts = append(verdicts, verdict)
+				}
+
+				return true, nil
+			}, opts...)
+			if err != nil {
 				// NoMatchError/NoKindMatchError from the actual List
 				// remains as defense in depth — the RESTMapper's discovery
 				// cache can be briefly stale during a cluster upgrade even
@@ -784,50 +836,6 @@ func collectVerdicts(
 				}
 				listErrs = errors.Join(listErrs, fmt.Errorf("list %s by %s: %w", gk, labelKey, err))
 				continue
-			}
-
-			for i := range list.Items {
-				obj := &list.Items[i]
-				key := client.ObjectKey{Namespace: obj.GetNamespace(), Name: obj.GetName()}
-				if _, dup := seen[key]; dup {
-					continue
-				}
-				seen[key] = struct{}{}
-
-				verdict := resourceVerdict{
-					GVK:       *listGVK,
-					Name:      obj.GetName(),
-					Namespace: obj.GetNamespace(),
-					Healthy:   true,
-				}
-				verdict.GVK.Kind = gk.Kind // strip the "List" suffix
-
-				if obj.GetDeletionTimestamp() != nil {
-					verdicts = append(verdicts, verdict)
-					continue
-				}
-
-				// Build the CEL activation once per object; every rule
-				// for this Kind reuses it.
-				activation := objActivation{obj: obj.Object}
-
-				// Evaluate every rule registered for this GroupKind. First
-				// failure wins; we record its message + source.
-				for _, rule := range gkRules {
-					healthy, reason, evalErr := rule.evaluate(activation)
-					if evalErr != nil {
-						listErrs = errors.Join(listErrs, fmt.Errorf("evaluate %s %s/%s (rule %s): %w", gk, obj.GetNamespace(), obj.GetName(), rule.Source, evalErr))
-						continue
-					}
-					if !healthy {
-						verdict.Healthy = false
-						verdict.Reason = reason
-						verdict.RuleSrc = rule.Source
-						break
-					}
-				}
-
-				verdicts = append(verdicts, verdict)
 			}
 		}
 	}
@@ -1172,21 +1180,24 @@ func findOwnedClusterConfiguration(
 	}
 	clusterConfigCache.Unlock()
 
-	list := new(addoncontrollerv1beta1.ClusterConfigurationList)
-	if err := rgnClient.List(ctx, list, client.InNamespace(namespace)); err != nil {
-		return nil, fmt.Errorf("list ClusterConfigurations in %s: %w", namespace, err)
-	}
+	// paged with an early exit: only the single ClusterConfiguration owned by the Profile
+	// is of interest, the rest of the namespace never has to be fetched
 	var found *addoncontrollerv1beta1.ClusterConfiguration
-	for i := range list.Items {
-		for _, owner := range list.Items[i].OwnerReferences {
-			if owner.UID == profileUID {
-				found = &list.Items[i]
-				break
+	err := kubeutil.EachPage(ctx, rgnClient, func() *addoncontrollerv1beta1.ClusterConfigurationList {
+		return new(addoncontrollerv1beta1.ClusterConfigurationList)
+	}, func(page *addoncontrollerv1beta1.ClusterConfigurationList) (bool, error) {
+		for i := range page.Items {
+			for _, owner := range page.Items[i].OwnerReferences {
+				if owner.UID == profileUID {
+					found = &page.Items[i]
+					return false, nil
+				}
 			}
 		}
-		if found != nil {
-			break
-		}
+		return true, nil
+	}, client.InNamespace(namespace))
+	if err != nil {
+		return nil, fmt.Errorf("list ClusterConfigurations in %s: %w", namespace, err)
 	}
 
 	// Cache both hits and misses: a miss (found == nil) is common

@@ -218,9 +218,9 @@ type errClient struct {
 }
 
 func (e *errClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-	switch list.(type) {
-	case *corev1.NamespaceList:
-		if e.listNamespacesErr != nil {
+	switch l := list.(type) {
+	case *metav1.PartialObjectMetadataList: // namespaces are listed as metadata only
+		if l.GroupVersionKind().Kind == "Namespace" && e.listNamespacesErr != nil {
 			return e.listNamespacesErr
 		}
 	case *corev1.PodList:
@@ -240,7 +240,7 @@ func (e *errClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...
 	return e.Client.DeleteAllOf(ctx, obj, opts...)
 }
 
-func Test_findPodsUsingPVC(t *testing.T) {
+func Test_findPodsUsingPVCs(t *testing.T) {
 	tests := []struct {
 		name      string
 		objects   []client.Object
@@ -290,11 +290,11 @@ func Test_findPodsUsingPVC(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cl := fake.NewClientBuilder().WithObjects(tt.objects...).Build()
-			pods, err := findPodsUsingPVC(t.Context(), cl, tt.namespace, tt.claimName)
+			podsByPVC, err := findPodsUsingPVCs(t.Context(), cl, tt.namespace)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if len(pods) != tt.wantPods {
+			if pods := podsByPVC[tt.claimName]; len(pods) != tt.wantPods {
 				t.Fatalf("want %d pods, got %d", tt.wantPods, len(pods))
 			}
 		})

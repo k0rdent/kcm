@@ -391,7 +391,7 @@ func Test_SegmentIO_Collect(t *testing.T) {
 
 	segmentClient := &mockSegment{}
 	// create collector
-	collector, err := NewSegmentIO(segmentClient, mgmtCl, 1, "", "")
+	collector, err := NewSegmentIO(segmentClient, mgmtCl, nil, 1, "", "")
 	reqs.NoError(err, "construct the collector")
 	collector.childFactory = fakeFactory
 
@@ -522,7 +522,7 @@ func Test_SegmentIO_Collect_WithEnrichment(t *testing.T) {
 
 	segmentClient := &mockSegment{}
 	// create collector
-	collector, err := NewSegmentIO(segmentClient, mgmtCl, 1, extraResource, extraCEL)
+	collector, err := NewSegmentIO(segmentClient, mgmtCl, nil, 1, extraResource, extraCEL)
 	reqs.NoError(err, "construct the collector")
 	collector.childFactory = func(_ []byte, s *runtime.Scheme) (client.Client, error) {
 		return fake.NewClientBuilder().WithScheme(s).Build(), nil

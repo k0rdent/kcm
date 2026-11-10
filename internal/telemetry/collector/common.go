@@ -28,6 +28,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	kubevirtv1 "kubevirt.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 // copied from "github.com/k0sproject/k0smotron/api/controlplane/v1beta1" to avoid dependency
@@ -108,67 +110,61 @@ func getGpuOperatorPresence(dsList []metav1.PartialObjectMetadata) (nvidiaPresen
 	return gpuOperators[nvidiaKey], gpuOperators[amdKey]
 }
 
-func streamPaginatedPods(ctx context.Context, cl client.Client, limit int64, handle func(pods []*corev1.Pod)) error {
-	opts := &client.ListOptions{Limit: limit}
+func streamPaginatedPods(ctx context.Context, cl client.Reader, limit int64, handle func(pods []*corev1.Pod)) error {
+	err := kubeutil.EachPage(ctx, cl, func() *corev1.PodList { return new(corev1.PodList) },
+		func(list *corev1.PodList) (bool, error) {
+			out := make([]*corev1.Pod, len(list.Items))
+			for i := range list.Items {
+				out[i] = &list.Items[i]
+			}
+			handle(out)
 
-	for {
-		var list corev1.PodList
-		if err := cl.List(ctx, &list, opts); err != nil {
-			return fmt.Errorf("failed to list pods: %w", err)
-		}
-
-		out := make([]*corev1.Pod, len(list.Items))
-		for i := range list.Items {
-			out[i] = &list.Items[i]
-		}
-		handle(out)
-
-		opts.Continue = list.Continue
-		if opts.Continue == "" {
-			break
-		}
-	}
-	return nil
-}
-
-func streamPaginatedNodes(ctx context.Context, cl client.Client, limit int64, handle func(nodes []*corev1.Node)) error {
-	opts := &client.ListOptions{Limit: limit}
-
-	for {
-		var list corev1.NodeList
-		if err := cl.List(ctx, &list, opts); err != nil {
-			return fmt.Errorf("failed to list nodes: %w", err)
-		}
-
-		items := make([]*corev1.Node, len(list.Items))
-		for i := range list.Items {
-			items[i] = &list.Items[i]
-		}
-
-		handle(items)
-
-		opts.Continue = list.Continue
-		if opts.Continue == "" {
-			break
-		}
+			return true, nil
+		}, client.Limit(limit))
+	if err != nil {
+		return fmt.Errorf("failed to list pods: %w", err)
 	}
 
 	return nil
 }
 
-// listAsPartial lists objects with the given GVK. WARN: Does NOT paginate results.
-func listAsPartial(ctx context.Context, c client.Client, gvk schema.GroupVersionKind) ([]metav1.PartialObjectMetadata, error) {
-	ll := new(metav1.PartialObjectMetadataList)
-	ll.SetGroupVersionKind(gvk)
+func streamPaginatedNodes(ctx context.Context, cl client.Reader, limit int64, handle func(nodes []*corev1.Node)) error {
+	err := kubeutil.EachPage(ctx, cl, func() *corev1.NodeList { return new(corev1.NodeList) },
+		func(list *corev1.NodeList) (bool, error) {
+			items := make([]*corev1.Node, len(list.Items))
+			for i := range list.Items {
+				items[i] = &list.Items[i]
+			}
+			handle(items)
 
-	// NOTE: PartialObjectMetadata does not support Continue until it explicitly set in the cached client to bypass the cache for this Kind.
-	// Using the PartialObjectMetadata is already an optimization so we let the cached client to do his job without limiting results.
-	// Suggestion: split the function into 2 (mgmt and child), because we have the control over the latter.
-	if err := c.List(ctx, ll); err != nil {
+			return true, nil
+		}, client.Limit(limit))
+	if err != nil {
+		return fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	return nil
+}
+
+// listAsPartial lists objects with the given GVK page by page.
+//
+// WARN: the reader must be an uncached one, the cache does not serve the continue option.
+func listAsPartial(ctx context.Context, c client.Reader, gvk schema.GroupVersionKind) ([]metav1.PartialObjectMetadata, error) {
+	var items []metav1.PartialObjectMetadata
+
+	err := kubeutil.EachPage(ctx, c, func() *metav1.PartialObjectMetadataList {
+		ll := new(metav1.PartialObjectMetadataList)
+		ll.SetGroupVersionKind(gvk)
+		return ll
+	}, func(page *metav1.PartialObjectMetadataList) (bool, error) {
+		items = append(items, page.Items...)
+		return true, nil
+	})
+	if err != nil {
 		return nil, fmt.Errorf("failed to list %s: %w", gvk.String(), err)
 	}
 
-	return ll.Items, nil
+	return items, nil
 }
 
 func getChildScheme() (*runtime.Scheme, error) {
