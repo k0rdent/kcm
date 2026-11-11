@@ -30,7 +30,8 @@ var (
 )
 
 func init() {
-	defaultRecorder = events.NewFakeRecorder(100)
+	// Discards events until InitFromRecorder: a buffered fake nobody drains blocks once full.
+	defaultRecorder = &events.FakeRecorder{}
 }
 
 // InitFromRecorder initializes the global default recorder. It can only be called once.
