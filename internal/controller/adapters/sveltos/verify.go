@@ -773,8 +773,9 @@ func collectVerdicts(
 				opts = append(opts, client.InNamespace(serviceNamespace))
 			}
 
-			// the child cluster is read through an uncached client, so the objects are
-			// fetched and evaluated page by page instead of all at once
+			// objects are fetched and evaluated page by page instead of all at once;
+			// a self-managing ServiceSet reads through the cache, which EachPage serves
+			// as a single list
 			err := kubeutil.EachPage(ctx, childClient, func() *unstructured.UnstructuredList {
 				list := &unstructured.UnstructuredList{}
 				list.SetGroupVersionKind(*listGVK)
@@ -1180,8 +1181,9 @@ func findOwnedClusterConfiguration(
 	}
 	clusterConfigCache.Unlock()
 
-	// paged with an early exit: only the single ClusterConfiguration owned by the Profile
-	// is of interest, the rest of the namespace never has to be fetched
+	// paged with an early exit: only the single ClusterConfiguration owned by the Profile is
+	// of interest, so for a remote region the rest of the namespace is never fetched; a
+	// management cluster lookup goes through the cache, which EachPage serves as a single list
 	var found *addoncontrollerv1beta1.ClusterConfiguration
 	err := kubeutil.EachPage(ctx, rgnClient, func() *addoncontrollerv1beta1.ClusterConfigurationList {
 		return new(addoncontrollerv1beta1.ClusterConfigurationList)

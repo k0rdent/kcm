@@ -146,9 +146,8 @@ func streamPaginatedNodes(ctx context.Context, cl client.Reader, limit int64, ha
 	return nil
 }
 
-// listAsPartial lists objects with the given GVK page by page.
-//
-// WARN: the reader must be an uncached one, the cache does not serve the continue option.
+// listAsPartial lists objects with the given GVK page by page, which only pays off for an
+// uncached reader, see [kubeutil.EachPage].
 func listAsPartial(ctx context.Context, c client.Reader, gvk schema.GroupVersionKind) ([]metav1.PartialObjectMetadata, error) {
 	var items []metav1.PartialObjectMetadata
 

@@ -49,7 +49,10 @@ func (r *pagedReader) List(_ context.Context, list client.ObjectList, opts ...cl
 		}
 	}
 
-	end := min(start+int(o.Limit), len(r.pods))
+	end := len(r.pods) // no limit means everything, as the cache does
+	if o.Limit > 0 {
+		end = min(start+int(o.Limit), len(r.pods))
+	}
 
 	podList, ok := list.(*corev1.PodList)
 	if !ok {
@@ -125,14 +128,37 @@ func TestEachPage(t *testing.T) {
 		require.Equal(t, 1, r.lists)
 	})
 
-	t.Run("rejects a cached reader", func(t *testing.T) {
+	t.Run("serves a cached reader in one unlimited list", func(t *testing.T) {
 		r := &pagedReader{pods: pods(4), forcedContinue: cachedReaderContinue}
 
-		err := EachPage(t.Context(), r, newList, func(*corev1.PodList) (bool, error) {
+		var seen []string
+		pages := 0
+		require.NoError(t, EachPage(t.Context(), r, newList, func(page *corev1.PodList) (bool, error) {
+			pages++
+			for _, p := range page.Items {
+				seen = append(seen, p.Name)
+			}
 			return true, nil
-		}, client.Limit(2))
+		}, client.Limit(2)))
 
-		require.ErrorContains(t, err, "uncached reader is required")
-		require.Equal(t, 1, r.lists)
+		require.Len(t, seen, 4) // the truncated first page never reaches the handler
+		require.Equal(t, 1, pages)
+		require.Equal(t, 2, r.lists)
+		require.Zero(t, r.lastLimit)
+	})
+
+	t.Run("serves a cached reader even when the handler exits early", func(t *testing.T) {
+		r := &pagedReader{pods: pods(4), forcedContinue: cachedReaderContinue}
+
+		var seen []string
+		require.NoError(t, EachPage(t.Context(), r, newList, func(page *corev1.PodList) (bool, error) {
+			for _, p := range page.Items {
+				seen = append(seen, p.Name)
+			}
+			return false, nil
+		}, client.Limit(2)))
+
+		require.Len(t, seen, 4)
+		require.Equal(t, 2, r.lists)
 	})
 }

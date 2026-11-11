@@ -80,9 +80,8 @@ func (f *parentDataFetcher) retry(ctx context.Context, op func() error) error {
 	}, backoff.WithContext(f.expBackoff, ctx))
 }
 
-// fetch reads the parent cluster data page by page.
-//
-// WARN: parentReader must be an uncached reader, the cache does not serve the continue option.
+// fetch reads the parent cluster data page by page, which only pays off for an uncached
+// parentReader, see [kubeutil.EachPage].
 func (f *parentDataFetcher) fetch(ctx context.Context, parentReader client.Reader, dataScope scope) error {
 	if dataScope.isOnline() && dataScope.isMgmt() {
 		f.mgmtTemplateName2Template = make(map[client.ObjectKey]*kcmv1.ClusterTemplate)

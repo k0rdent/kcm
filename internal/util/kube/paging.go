@@ -16,7 +16,6 @@ package kube
 
 import (
 	"context"
-	"errors"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -32,8 +31,12 @@ const cachedReaderContinue = "continue-not-supported"
 // handle returns false. The list given to handle is valid only until the next page is
 // fetched, so anything to be kept must be copied out.
 //
-// WARN: only the API server serves the continue option, the manager's cache rejects it.
-// The reader must be an uncached one (a regional or child cluster client, an APIReader).
+// Only the API server serves the continue option, so paging pays off solely for an uncached
+// reader (a regional or child cluster client, an APIReader). A cached reader is detected
+// before anything reaches handle and is then served in a single unlimited list, which is what
+// the cache does anyway: correct, just without the benefit of paging.
+//
+// A Limit among the options is therefore the page size, not a cap on the objects handled.
 //
 // An expired continue token (410 Gone) is returned as is: every caller either retries the
 // whole read or re-runs on the next poll.
@@ -44,10 +47,19 @@ func EachPage[L client.ObjectList](ctx context.Context, r client.Reader, newList
 		listOpts.Limit = DefaultPageSize
 	}
 
+	cached := false
 	for {
 		list := newList()
 		if err := r.List(ctx, list, listOpts); err != nil {
 			return err
+		}
+
+		// The cache marks every answer with this token and truncates at Limit, so the
+		// objects are only complete once it has been asked again without a limit. Checked
+		// before handle runs, otherwise a truncated page would reach it first.
+		if !cached && list.GetContinue() == cachedReaderContinue {
+			cached, listOpts.Limit = true, 0
+			continue
 		}
 
 		proceed, err := handle(list)
@@ -55,15 +67,13 @@ func EachPage[L client.ObjectList](ctx context.Context, r client.Reader, newList
 			return err
 		}
 
+		if cached {
+			return nil // everything was served in one go
+		}
+
 		listOpts.Continue = list.GetContinue()
 		if listOpts.Continue == "" {
 			return nil
-		}
-
-		// the cache answers every list with this marker, and it truncates at Limit,
-		// so going on would either fail on the next call or silently lose objects
-		if listOpts.Continue == cachedReaderContinue {
-			return errors.New("paging is not supported by the cached client, an uncached reader is required")
 		}
 	}
 }
