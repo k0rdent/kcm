@@ -50,7 +50,7 @@ func (m *mockCollector) Close(_ context.Context) error {
 }
 
 func TestNewRunner_DisabledMode(t *testing.T) {
-	cfg := &Config{Mode: ModeDisabled, ParentClient: fake.NewClientBuilder().Build()}
+	cfg := &Config{Mode: ModeDisabled, ParentClient: fake.NewClientBuilder().Build(), DirectReader: fake.NewClientBuilder().Build()}
 	cfg.normalize()
 
 	runner, err := NewRunner(cfg)
@@ -67,7 +67,7 @@ func TestNewRunner_InvalidConfig(t *testing.T) {
 }
 
 func TestNewRunner_ValidOnlineMode(t *testing.T) {
-	cfg := &Config{Mode: ModeOnline, ParentClient: fake.NewClientBuilder().Build()}
+	cfg := &Config{Mode: ModeOnline, ParentClient: fake.NewClientBuilder().Build(), DirectReader: fake.NewClientBuilder().Build()}
 	cfg.normalize()
 
 	segmentToken = "not-empty"
@@ -82,7 +82,7 @@ func TestNewRunner_ValidLocalMode(t *testing.T) {
 		_ = os.RemoveAll("foo")
 	})
 
-	cfg := &Config{Mode: ModeLocal, LocalBaseDir: "foo", ParentClient: fake.NewClientBuilder().Build()}
+	cfg := &Config{Mode: ModeLocal, LocalBaseDir: "foo", ParentClient: fake.NewClientBuilder().Build(), DirectReader: fake.NewClientBuilder().Build()}
 	cfg.normalize()
 
 	runn, err := NewRunner(cfg)
@@ -91,7 +91,7 @@ func TestNewRunner_ValidLocalMode(t *testing.T) {
 }
 
 func TestNewRunner_OnlineNoSegmentToken(t *testing.T) {
-	cfg := &Config{Mode: ModeOnline, ParentClient: fake.NewClientBuilder().Build()}
+	cfg := &Config{Mode: ModeOnline, ParentClient: fake.NewClientBuilder().Build(), DirectReader: fake.NewClientBuilder().Build()}
 	cfg.normalize()
 
 	segmentToken = ""

@@ -64,10 +64,6 @@ func NewLocalCollector(parentClient client.Client, parentReader client.Reader, b
 		return nil, fmt.Errorf("failed to create new file for telemetry collection: %w", err)
 	}
 
-	if parentReader == nil {
-		parentReader = parentClient
-	}
-
 	return &LocalCollector{
 		file:         f,
 		parentClient: parentClient,

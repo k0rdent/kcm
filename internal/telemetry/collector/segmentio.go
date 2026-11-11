@@ -71,10 +71,6 @@ func NewSegmentIO(
 		return nil, fmt.Errorf("creating CEL extractor: %w", err)
 	}
 
-	if parentReader == nil {
-		parentReader = parentClient
-	}
-
 	return &SegmentIO{
 		segmentCl:     segmentClient,
 		parentClient:  parentClient,

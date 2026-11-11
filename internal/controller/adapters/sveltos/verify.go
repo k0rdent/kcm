@@ -774,8 +774,8 @@ func collectVerdicts(
 			}
 
 			// objects are fetched and evaluated page by page instead of all at once;
-			// a self-managing ServiceSet reads through the cache, which EachPage serves
-			// as a single list
+			// an Unstructured list always goes to the API server, the manager's client
+			// does not cache those kinds
 			err := kubeutil.EachPage(ctx, childClient, func() *unstructured.UnstructuredList {
 				list := &unstructured.UnstructuredList{}
 				list.SetGroupVersionKind(*listGVK)

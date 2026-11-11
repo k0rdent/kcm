@@ -195,8 +195,6 @@ func DeletePVCsAndOwnersAndWait(
 						continue
 					}
 
-					ldebug.Info("Processing PVC", "pvc namespace", pvc.Namespace, "pvc name", pvc.Name)
-
 					if podsByPVC == nil {
 						var err error
 						if podsByPVC, err = findPodsUsingPVCs(ctx, c, ns); err != nil {
@@ -204,45 +202,8 @@ func DeletePVCsAndOwnersAndWait(
 						}
 					}
 
-					for _, pod := range podsByPVC[pvc.Name] {
-						ldebug.Info("Processing Pod", "pod namespace", pod.Namespace, "pod name", pod.Name)
-
-						topOwner, err := findTopLevelAllowedController(ctx, c, &pod.ObjectMeta)
-						if err != nil {
-							return false, fmt.Errorf("failed to resolve owners for pod %s/%s: %w", pod.Namespace, pod.Name, err)
-						}
-
-						if topOwner == nil {
-							ldebug.Info("Deleting Pod", "pod namespace", pod.Namespace, "pod name", pod.Name)
-
-							// delete plain pod
-							if err := c.Delete(ctx, &pod); client.IgnoreNotFound(err) != nil {
-								return false, fmt.Errorf("failed to delete pod %s/%s: %w", pod.Namespace, pod.Name, err)
-							}
-
-							if err := removeFinalizers(ctx, c, &pod); err != nil {
-								ldebug.Error(err, "failed to remove finalizers from pod", "pod ns", pod.Namespace, "pod name", pod.Name)
-							}
-
-							continue
-						}
-
-						ldebug.Info("Deleting top owner", "owner namespace", topOwner.GetNamespace(), "owner name", topOwner.GetName(), "owner kind", topOwner.GetKind())
-						// delete top owner of the pod (pod should be gc-ed)
-						if err := c.Delete(ctx, topOwner); client.IgnoreNotFound(err) != nil {
-							return false, fmt.Errorf("failed to delete owner %s/%s (kind=%s): %w",
-								topOwner.GetNamespace(), topOwner.GetName(), topOwner.GetKind(), err)
-						}
-
-						if err := removeFinalizers(ctx, c, topOwner); err != nil {
-							ldebug.Error(err, "failed to remove finalizers from owner", "owner ns", topOwner.GetNamespace(), "owner name", topOwner.GetName(), "owner kind", topOwner.GetKind())
-						}
-					}
-
-					// delete the PVC itself
-					ldebug.Info("Deleting PVC", "pvc namespace", pvc.Namespace, "pvc name", pvc.Name)
-					if err := c.Delete(ctx, pvc); client.IgnoreNotFound(err) != nil {
-						return false, fmt.Errorf("failed to delete pvc %s/%s: %w", pvc.Namespace, pvc.Name, err)
+					if err := deletePVCAndConsumers(ctx, c, pvc, podsByPVC[pvc.Name]); err != nil {
+						return false, err
 					}
 				}
 
@@ -332,6 +293,57 @@ func collectPersistentVolumeNames(ctx context.Context, c client.Client, exclude 
 	}
 
 	return pvWaitList, nil
+}
+
+// deletePVCAndConsumers removes the pods holding the given PVC, preferring their top-level
+// controller so the pods are not recreated, and then the PVC itself. Finalizer removal
+// failures are logged, not propagated: the object is already being deleted.
+func deletePVCAndConsumers(ctx context.Context, c client.Client, pvc *corev1.PersistentVolumeClaim, pods []corev1.Pod) error {
+	ldebug := log.FromContext(ctx).V(1)
+
+	ldebug.Info("Processing PVC", "pvc namespace", pvc.Namespace, "pvc name", pvc.Name)
+
+	for _, pod := range pods {
+		ldebug.Info("Processing Pod", "pod namespace", pod.Namespace, "pod name", pod.Name)
+
+		topOwner, err := findTopLevelAllowedController(ctx, c, &pod.ObjectMeta)
+		if err != nil {
+			return fmt.Errorf("failed to resolve owners for pod %s/%s: %w", pod.Namespace, pod.Name, err)
+		}
+
+		if topOwner == nil {
+			ldebug.Info("Deleting Pod", "pod namespace", pod.Namespace, "pod name", pod.Name)
+
+			// delete plain pod
+			if err := c.Delete(ctx, &pod); client.IgnoreNotFound(err) != nil {
+				return fmt.Errorf("failed to delete pod %s/%s: %w", pod.Namespace, pod.Name, err)
+			}
+
+			if err := removeFinalizers(ctx, c, &pod); err != nil {
+				ldebug.Error(err, "failed to remove finalizers from pod", "pod ns", pod.Namespace, "pod name", pod.Name)
+			}
+
+			continue
+		}
+
+		ldebug.Info("Deleting top owner", "owner namespace", topOwner.GetNamespace(), "owner name", topOwner.GetName(), "owner kind", topOwner.GetKind())
+		// delete top owner of the pod (pod should be gc-ed)
+		if err := c.Delete(ctx, topOwner); client.IgnoreNotFound(err) != nil {
+			return fmt.Errorf("failed to delete owner %s/%s (kind=%s): %w",
+				topOwner.GetNamespace(), topOwner.GetName(), topOwner.GetKind(), err)
+		}
+
+		if err := removeFinalizers(ctx, c, topOwner); err != nil {
+			ldebug.Error(err, "failed to remove finalizers from owner", "owner ns", topOwner.GetNamespace(), "owner name", topOwner.GetName(), "owner kind", topOwner.GetKind())
+		}
+	}
+
+	ldebug.Info("Deleting PVC", "pvc namespace", pvc.Namespace, "pvc name", pvc.Name)
+	if err := c.Delete(ctx, pvc); client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to delete pvc %s/%s: %w", pvc.Namespace, pvc.Name, err)
+	}
+
+	return nil
 }
 
 // findPodsUsingPVCs pages through the pods of the namespace and indexes by claim name the
