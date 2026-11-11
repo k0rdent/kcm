@@ -39,6 +39,9 @@ const (
 // ClusterDeploymentKind is the string representation of a ClusterDeployment.
 const ClusterDeploymentKind = "ClusterDeployment"
 
+// RBACPolicyResyncAnnotation forces an [RBACPolicy] sync whenever its value changes.
+const RBACPolicyResyncAnnotation = "k0rdent.mirantis.com/rbac-policy-resync"
+
 const (
 	// TemplateReadyCondition indicates the referenced Template exists and valid.
 	TemplateReadyCondition = "TemplateReady"
@@ -100,12 +103,11 @@ const (
 	// CAPIClusterMissingReason indicates the underlying CAPI Cluster object is unexpectedly
 	// absent while the [ClusterDeployment] is still alive (e.g., it was deleted out-of-band).
 	CAPIClusterMissingReason = "CAPIClusterMissing"
-	// RBACPolicyPartiallyAppliedReason indicates some, or possibly all, of the referenced
-	// [RBACPolicy] bindings reached the child cluster while the sync as a whole did not succeed.
-	// The sync deliberately continues past a failing binding, so this is the common shape of an
-	// RBACPolicy failure and is worth telling apart from one that granted nothing at all.
-	// Whether anything is still live there is recorded by status.rbacPolicyGranted, not here.
+	// RBACPolicyPartiallyAppliedReason indicates the child cluster refused part or all of an [RBACPolicy] sync or revoke.
 	RBACPolicyPartiallyAppliedReason = "RBACPolicyPartiallyApplied"
+	// RBACPolicyClusterUnreachableReason indicates the failed requests of an [RBACPolicy] sync or
+	// revoke got no response from the child cluster, or its kubeconfig is gone.
+	RBACPolicyClusterUnreachableReason = "RBACPolicyClusterUnreachable"
 	// RBACPolicyNotFoundReason indicates spec.rbacPolicy names an [RBACPolicy] that does not exist.
 	// Shared by the "never granted anything" and the "granted, now revoked" cases so that the
 	// condition settles instead of being rewritten on the reconcile following a revoke.
@@ -218,10 +220,14 @@ type ClusterDeploymentStatus struct {
 
 	// +optional
 
-	// rbacPolicyGrant reports whether ClusterRoles and ClusterRoleBindings derived from the
-	// [RBACPolicy] named by spec.rbacPolicy may be live in this ClusterDeployment's child cluster.
-	// Empty means none are: either nothing was ever applied there, or everything that was has
-	// since been revoked. See [RBACPolicyGrantState].
+	// rbacPolicy reports the [RBACPolicy] sync state.
+	RBACPolicy RBACPolicyStatus `json:"rbacPolicy,omitempty,omitzero"`
+
+	// +optional
+
+	// rbacPolicyGrant mirrors rbacPolicy.grant for earlier releases.
+	//
+	// Deprecated: use rbacPolicy.grant. Kept for upgrades and downgrades.
 	RBACPolicyGrant RBACPolicyGrantState `json:"rbacPolicyGrant,omitempty"`
 
 	// +optional
@@ -258,17 +264,57 @@ type ClusterDeploymentStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
-// RBACPolicyGrantState reports what the RBAC operator may have left in a ClusterDeployment's child
-// cluster. It is set before the first write there and cleared only once everything the operator
-// created is gone, and it is the sole record of those objects once the [RBACPolicy] is deleted,
-// which is exactly when they have to be revoked.
+// RBACPolicyStatus reports the [RBACPolicy] sync state of a [ClusterDeployment].
+//
+// +kubebuilder:validation:MinProperties=1
+type RBACPolicyStatus struct {
+	// +optional
+
+	// lastAppliedTime is when a sync last succeeded, periodic resyncs included.
+	LastAppliedTime *metav1.Time `json:"lastAppliedTime,omitempty"`
+
+	// +optional
+
+	// lastSyncTime is when the last sync or revoke attempt completed. A retry failing with the
+	// same hash, reason and message (any message, if unreachable) refreshes it at most every
+	// 5 minutes. Cleared once a revoke completes.
+	LastSyncTime *metav1.Time `json:"lastSyncTime,omitempty"`
+
+	// +optional
+
+	// grant reports whether [RBACPolicy] objects may be live in the child cluster. Set before
+	// the first write there, cleared only after a complete revoke.
+	Grant RBACPolicyGrantState `json:"grant,omitempty"`
+
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+
+	// lastAppliedPolicy is the [RBACPolicy] name of the last successful sync.
+	LastAppliedPolicy string `json:"lastAppliedPolicy,omitempty"`
+
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=64
+
+	// syncHash identifies the [RBACPolicy] revision and resync request of the last attempt. It
+	// changes on the first attempt after a new resync annotation value, so a client can wait for
+	// it to change. It does not change while no attempt is made, e.g. the cluster is provisioning.
+	SyncHash string `json:"syncHash,omitempty"`
+
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+
+	// lastAppliedGeneration is the lastAppliedPolicy generation of the last successful sync.
+	LastAppliedGeneration int64 `json:"lastAppliedGeneration,omitempty"`
+}
+
+// RBACPolicyGrantState records whether RBAC objects may be live in a child cluster.
 //
 // +kubebuilder:validation:Enum=Granted
 type RBACPolicyGrantState string
 
-// RBACPolicyGrantedState indicates ClusterRoles and ClusterRoleBindings this operator created may
-// still be live in the child cluster, so a revoke has to prune them. An over-approximation: it is
-// set before the bindings are applied, so it holds even for a sync that created nothing.
+// RBACPolicyGrantedState indicates RBAC objects may be live in the child cluster.
 const RBACPolicyGrantedState RBACPolicyGrantState = "Granted"
 
 // +kubebuilder:object:root=true
