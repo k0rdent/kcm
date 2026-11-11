@@ -270,18 +270,20 @@ type ClusterDeploymentStatus struct {
 type RBACPolicyStatus struct {
 	// +optional
 
-	// lastAppliedTime is when the last successful sync completed.
+	// lastAppliedTime is when a sync last succeeded, periodic resyncs included.
 	LastAppliedTime *metav1.Time `json:"lastAppliedTime,omitempty"`
 
 	// +optional
 
-	// lastSyncTime is when the last sync or revoke attempt completed. Repeated identical
-	// failures refresh it at most every 5 minutes. Cleared once a revoke completes.
+	// lastSyncTime is when the last sync or revoke attempt completed. A retry failing with the
+	// same hash, reason and message (any message, if unreachable) refreshes it at most every
+	// 5 minutes. Cleared once a revoke completes.
 	LastSyncTime *metav1.Time `json:"lastSyncTime,omitempty"`
 
 	// +optional
 
-	// grant reports whether [RBACPolicy] objects may be live in the child cluster.
+	// grant reports whether [RBACPolicy] objects may be live in the child cluster. Set before
+	// the first write there, cleared only after a complete revoke.
 	Grant RBACPolicyGrantState `json:"grant,omitempty"`
 
 	// +optional
@@ -295,7 +297,9 @@ type RBACPolicyStatus struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=64
 
-	// syncHash identifies the [RBACPolicy] revision and resync request of the last attempt.
+	// syncHash identifies the [RBACPolicy] revision and resync request of the last attempt. It
+	// changes on the first attempt after a new resync annotation value, so a client can wait for
+	// it to change. It does not change while no attempt is made, e.g. the cluster is provisioning.
 	SyncHash string `json:"syncHash,omitempty"`
 
 	// +optional

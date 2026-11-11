@@ -1267,7 +1267,7 @@ func (r *ClusterDeploymentReconciler) ensureRBACPolicy(ctx context.Context, scop
 	)
 	// Sync stops at the first request that got no response; a Prune after it would only wait out
 	// another dial timeout against the same dead endpoint.
-	if !rbac.Unreachable(syncErr) {
+	if !rbac.Stopped(syncErr) {
 		pruneChanged, pruneErr = rbac.Prune(ctx, childCl, desiredRoles, desiredBindings)
 	}
 	if joined := errors.Join(syncErr, pruneErr); joined != nil {
@@ -1351,7 +1351,10 @@ func rbacStatus(cd *kcmv1.ClusterDeployment) *kcmv1.RBACPolicyStatus {
 func (r *ClusterDeploymentReconciler) reportRBACFailure(cd *kcmv1.ClusterDeployment, hash, reason, eventReason string, err error) {
 	st := rbacStatus(cd)
 	cond := apimeta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition)
-	retry := st.SyncHash == hash && cond != nil && cond.Status == metav1.ConditionFalse && cond.Reason == reason
+	// Transport error messages differ per attempt, so those are compared by reason alone.
+	retry := st.SyncHash == hash && cond != nil && cond.Status == metav1.ConditionFalse &&
+		cond.Reason == reason && cond.ObservedGeneration == cd.Generation &&
+		(cond.Message == err.Error() || rbac.Unreachable(err))
 	if retry && st.LastSyncTime != nil && time.Since(st.LastSyncTime.Time) < rbacResyncInterval {
 		return
 	}
@@ -1367,7 +1370,7 @@ func (r *ClusterDeploymentReconciler) reportRBACFailure(cd *kcmv1.ClusterDeploym
 // rbacGranted reports whether RBAC objects may be live in cd's child cluster, by either marker.
 func rbacGranted(cd *kcmv1.ClusterDeployment) bool {
 	return cd.Status.RBACPolicy.Grant == kcmv1.RBACPolicyGrantedState ||
-		cd.Status.RBACPolicyGrant == kcmv1.RBACPolicyGrantedState //nolint:staticcheck // legacy marker, read until migrated
+		cd.Status.RBACPolicyGrant == kcmv1.RBACPolicyGrantedState //nolint:staticcheck // legacy marker, kept for upgrades and downgrades
 }
 
 // clearRBACStatus resets cd's RBACPolicy status, both grant markers included.

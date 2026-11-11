@@ -526,6 +526,7 @@ func TestSyncStopsAtFirstUnreachableRequest(t *testing.T) {
 	// a request with no response ends the attempt
 	desiredRoles, desiredBindings, _, err := Sync(t.Context(), createFails(dial), policy)
 	g.Expect(Unreachable(err)).To(BeTrue())
+	g.Expect(Stopped(err)).To(BeTrue())
 	g.Expect(creates).To(ConsistOf(kcmv1.ClusterRoleBindingNamePrefix + "a"))
 	// everything stays desired, so a later Prune keeps what was not reached
 	g.Expect(desiredBindings).To(HaveLen(2))
@@ -535,5 +536,23 @@ func TestSyncStopsAtFirstUnreachableRequest(t *testing.T) {
 	_, _, changed, err := Sync(t.Context(), createFails(forbidden), policy)
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(changed).To(BeFalse())
+	g.Expect(Stopped(err)).To(BeFalse())
+
+	// a refusal followed by no response is not unreachable, but still stopped
+	creates = nil
+	mixed := fake.NewClientBuilder().WithScheme(testscheme.Scheme).WithInterceptorFuncs(interceptor.Funcs{
+		Create: func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.CreateOption) error {
+			creates = append(creates, obj.GetName())
+			if len(creates) == 1 {
+				return forbidden
+			}
+			return dial
+		},
+	}).Build()
+	_, _, changed, err = Sync(t.Context(), mixed, policy)
+	g.Expect(changed).To(BeFalse())
+	g.Expect(Unreachable(err)).To(BeFalse())
+	g.Expect(Stopped(err)).To(BeTrue())
+	g.Expect(Retriable(err)).To(BeTrue())
 	g.Expect(creates).To(HaveLen(2))
 }

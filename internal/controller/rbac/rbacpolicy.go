@@ -87,6 +87,17 @@ func Unreachable(err error) bool {
 		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
 }
 
+// stoppedError marks a [Sync] that stopped at an [Unreachable] request.
+type stoppedError struct{ error }
+
+func (e stoppedError) Unwrap() error { return e.error }
+
+// Stopped reports whether err is from a [Sync] that stopped at an [Unreachable] request.
+func Stopped(err error) bool {
+	var s stoppedError
+	return errors.As(err, &s)
+}
+
 // Sync creates/updates the ClusterRoles and ClusterRoleBindings implied by policy's role catalog,
 // and returns the set of object names that are now desired (for use by [Prune]) and whether
 // anything was actually created or updated. A refused binding does not stop the rest; an
@@ -115,7 +126,7 @@ func Sync(ctx context.Context, childCl client.Client, policy *kcmv1.RBACPolicy) 
 			if err != nil {
 				errs = append(errs, fmt.Errorf("applying ClusterRole %s: %w", binding.ClusterRole, err))
 				if Unreachable(err) {
-					break
+					return desiredRoles, desiredBindings, changed, stoppedError{errors.Join(errs...)}
 				}
 				continue
 			}
@@ -128,7 +139,7 @@ func Sync(ctx context.Context, childCl client.Client, policy *kcmv1.RBACPolicy) 
 		if err != nil {
 			errs = append(errs, fmt.Errorf("applying ClusterRoleBinding %s: %w", bindingName, err))
 			if Unreachable(err) {
-				break
+				return desiredRoles, desiredBindings, changed, stoppedError{errors.Join(errs...)}
 			}
 		}
 	}

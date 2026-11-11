@@ -4162,6 +4162,103 @@ func Test_ensureRBACPolicy(t *testing.T) {
 		g.Expect(cd.Status).To(Equal(*before))
 	})
 
+	t.Run("a retry failing for the same reason with a different refusal, or after a spec edit, updates the condition", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD(policy.Name, "test-auth")
+		cd.UID = "retry-different-refusal-cd-uid"
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
+		refused := "k0rdent-compute-admin"
+		childCl := fake.NewClientBuilder().
+			WithScheme(testscheme.Scheme).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Create: func(ctx context.Context, cl crclient.WithWatch, obj crclient.Object, opts ...crclient.CreateOption) error {
+					if obj.GetName() == refused {
+						return apierrors.NewForbidden(schema.GroupResource{Group: rbacv1.GroupName, Resource: "clusterrolebindings"}, refused, errors.New("denied"))
+					}
+					return cl.Create(ctx, obj, opts...)
+				},
+			}).
+			Build()
+		r := &ClusterDeploymentReconciler{
+			MgmtClient: mgmtCl,
+			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+				return childCl, nil
+			},
+		}
+		scope := &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: policy}
+		message := func() string {
+			return meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition).Message
+		}
+
+		_, err := r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(HaveOccurred())
+		first := message()
+
+		// the same refusal again is deduplicated
+		before := cd.Status.DeepCopy()
+		_, err = r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(cd.Status).To(Equal(*before))
+
+		// a different refusal with the same reason is not
+		childCl = fake.NewClientBuilder().
+			WithScheme(testscheme.Scheme).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Create: func(context.Context, crclient.WithWatch, crclient.Object, ...crclient.CreateOption) error {
+					return apierrors.NewInvalid(schema.GroupKind{Group: rbacv1.GroupName, Kind: "ClusterRoleBinding"}, "k0rdent-compute-admin", nil)
+				},
+			}).
+			Build()
+		_, err = r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(message()).NotTo(Equal(first))
+		g.Expect(meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition).Reason).To(Equal(kcmv1.RBACPolicyPartiallyAppliedReason))
+
+		// nor is the same failure after a spec edit
+		cd.Generation++
+		_, err = r.ensureRBACPolicy(t.Context(), scope)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition).ObservedGeneration).To(Equal(cd.Generation))
+	})
+
+	t.Run("a sync with a refusal before the unreachable request skips the prune", func(t *testing.T) {
+		g := NewWithT(t)
+		cd := newCD(policy.Name, "test-auth")
+		cd.UID = "refused-then-unreachable-cd-uid"
+		twoBindings := policy.DeepCopy()
+		twoBindings.Spec.Bindings = append(twoBindings.Spec.Bindings, kcmv1.RBACPolicyBinding{
+			Name: "viewers", ClusterRole: "view", Subjects: []kcmv1.RBACPolicySubject{{Kind: rbacv1.GroupKind, Name: "viewers"}},
+		})
+		mgmtCl := mgmtClient(cd, capiCluster(cd.Name), kubeconfigSecret(cd.Name))
+		lists := 0
+		childCl := fake.NewClientBuilder().
+			WithScheme(testscheme.Scheme).
+			WithInterceptorFuncs(interceptor.Funcs{
+				List: func(ctx context.Context, cl crclient.WithWatch, list crclient.ObjectList, opts ...crclient.ListOption) error {
+					lists++
+					return cl.List(ctx, list, opts...)
+				},
+				Create: func(_ context.Context, _ crclient.WithWatch, obj crclient.Object, _ ...crclient.CreateOption) error {
+					if obj.GetName() == "k0rdent-viewers" {
+						return dialErr
+					}
+					return forbiddenErr
+				},
+			}).
+			Build()
+		r := &ClusterDeploymentReconciler{
+			MgmtClient: mgmtCl,
+			childClientFactory: func([]byte, *runtime.Scheme) (crclient.Client, error) {
+				return childCl, nil
+			},
+		}
+
+		_, err := r.ensureRBACPolicy(t.Context(), &clusterScope{cd: cd, rgnClient: mgmtCl, rbacPolicy: twoBindings})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(meta.FindStatusCondition(cd.Status.Conditions, kcmv1.RBACPolicyReadyCondition).Reason).To(Equal(kcmv1.RBACPolicyPartiallyAppliedReason))
+		g.Expect(lists).To(BeZero())
+	})
+
 	t.Run("a resync request always records a new attempt, whether the sync succeeds or not", func(t *testing.T) {
 		g := NewWithT(t)
 		cd := newCD(policy.Name, "test-auth")
