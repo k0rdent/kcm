@@ -241,8 +241,8 @@ spec:
                                   description: |-
                                     ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
                                     the bucket. This field is only supported for the 'gcp' and 'aws' providers.
-                                    For more information about workload identity:
-                                    https://fluxcd.io/flux/components/source/buckets/#workload-identity
+                                    For more information about object identity:
+                                    https://fluxcd.io/flux/integrations/object-identity/
                                   type: string
                                 sts:
                                   description: |-
@@ -586,7 +586,6 @@ spec:
                                       type: string
                                   type: object
                                 provider:
-                                  default: generic
                                   description: |-
                                     The provider used for authentication, can be 'aws', 'azure', 'gcp' or 'generic'.
                                     When not specified, defaults to 'generic'.
@@ -644,14 +643,17 @@ spec:
                                 serviceAccountName:
                                   description: |-
                                     ServiceAccountName is the name of the Kubernetes ServiceAccount used to authenticate
-                                    the image pull if the service account has attached pull secrets. For more information:
+                                    the image pull, either with the pull secrets attached to the service account or with
+                                    an object identity.
+                                    For more information about object identity:
+                                    https://fluxcd.io/flux/integrations/object-identity/
+                                    For more information about image pull secrets:
                                     https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account
                                   type: string
                                 suspend:
                                   description: This flag tells the controller to suspend the reconciliation of this source.
                                   type: boolean
                                 timeout:
-                                  default: 60s
                                   description: The timeout for remote OCI Repository operations like pulling, defaults to 60s.
                                   pattern: ^([0-9]+(\.[0-9]+)?(ms|s|m))+$
                                   type: string
@@ -729,10 +731,12 @@ spec:
                                   required:
                                     - provider
                                   type: object
-                              required:
-                                - interval
-                                - url
                               type: object
+                              x-kubernetes-validations:
+                                - message: url is required
+                                  rule: has(self.url)
+                                - message: interval is required
+                                  rule: has(self.interval)
                           type: object
                           x-kubernetes-validations:
                             - message: Git, Bucket and OCI are mutually exclusive.
