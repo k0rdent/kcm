@@ -120,7 +120,7 @@ func NewRunner(cfg *Config) (*Runner, error) {
 			return nil, fmt.Errorf("failed to init segmentio client: %w", err)
 		}
 
-		segmentCollector, err := collector.NewSegmentIO(segmentClient, cfg.ParentClient, cfg.Concurrency, cfg.ExtraResource, cfg.ExpressionCEL)
+		segmentCollector, err := collector.NewSegmentIO(segmentClient, cfg.ParentClient, cfg.DirectReader, cfg.Concurrency, cfg.ExtraResource, cfg.ExpressionCEL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to init segment collector: %w", err)
 		}
@@ -129,7 +129,7 @@ func NewRunner(cfg *Config) (*Runner, error) {
 	}
 
 	if cfg.Mode == ModeLocal {
-		localCollector, err := collector.NewLocalCollector(cfg.ParentClient, cfg.LocalBaseDir, cfg.Concurrency)
+		localCollector, err := collector.NewLocalCollector(cfg.ParentClient, cfg.DirectReader, cfg.LocalBaseDir, cfg.Concurrency)
 		if err != nil {
 			return nil, fmt.Errorf("failed to init local collector: %w", err)
 		}

@@ -31,8 +31,11 @@ var segmentToken = "" // segmentToken variable is set via the linker flags
 type Config struct {
 	// ParentClient is the client from the current (local) cluster, that is either
 	// a regional or the management cluster.
-	ParentClient    client.Client
-	DirectReader    client.Reader // WARN: need once during the init; used to by-pass cache before the Start()
+	ParentClient client.Client
+	// DirectReader by-passes the cache: during the init before the Start(), and to page
+	// through the parent cluster data. Required: reading that data through the cache would
+	// keep an informer per kind alive for a collection that runs once an interval.
+	DirectReader    client.Reader
 	Mode            Mode
 	SystemNamespace string
 	LocalBaseDir    string
@@ -97,6 +100,10 @@ func (c *Config) validate() error {
 
 	if c.ParentClient == nil {
 		return errors.New("management client must be set")
+	}
+
+	if c.DirectReader == nil {
+		return errors.New("direct reader must be set")
 	}
 
 	if c.Mode == ModeLocal && c.LocalBaseDir == "" {
