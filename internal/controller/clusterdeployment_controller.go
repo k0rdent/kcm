@@ -503,11 +503,16 @@ func (r *ClusterDeploymentReconciler) updateCluster(
 	// cluster is mid-upgrade or has a single NotReady machine.
 	helmResult, helmErr := r.reconcileHelmRelease(ctx, clusterTpl, scope)
 	rbacResult, rbacErr := r.ensureRBACPolicy(ctx, scope)
-	if err := errors.Join(helmErr, rbacErr); err != nil {
+	// After ensureClusterResources, so a changed auth config reaches a remote host in the same pass.
+	remoteResult, remoteErr := r.syncRemoteHostObjects(ctx, scope)
+	if remoteErr != nil {
+		r.warnf(cd, "RemoteHostSyncFailed", remoteErr.Error())
+	}
+	if err := errors.Join(helmErr, rbacErr, remoteErr); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	return soonerResult(helmResult, rbacResult), nil
+	return soonerResult(soonerResult(helmResult, rbacResult), remoteResult), nil
 }
 
 // soonerResult merges two reconcile results, keeping the earliest requeue either asks for.
