@@ -249,51 +249,6 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			clusterDeleteFunc = nil
 		})
 
-		// TODO sveltos currently doesn't update the status of the helmReleaseSummaries when
-		// a deployed helm release is updated to be invalid
-		XIt("Invalid multicluster service test", func() {
-			const (
-				multiClusterServiceName       = "test-multicluster"
-				multiClusterServiceMatchLabel = "k0rdent.mirantis.com/test-cluster-name"
-			)
-
-			defer GinkgoRecover()
-			ctx := context.Background()
-			cfg.SetDefaults(clusterTemplates, config.TestingProviderDocker)
-
-			By(fmt.Sprintf("Testing configuration:\n%s\n", cfg.String()))
-			clusterName = clusterdeployment.GenerateUniqueClusterName(fmt.Sprintf("docker-%d", i))
-			sd, deleteFn := createAndWaitCluster(ctx, kc, clusterName)
-
-			clusterDeleteFunc = deleteFn
-
-			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, openCostChartName, multiClusterServiceMatchLabel, multiClusterServiceName)
-			mcsServiceSpec := mcs.Spec.ServiceSpec
-			mcs.Spec.ServiceSpec = kcmv1.ServiceSpec{}
-			multiclusterservice.CreateMultiClusterService(ctx, kc.CrClient, mcs)
-
-			Eventually(func() error {
-				Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(mcs), mcs)).NotTo(HaveOccurred(), "failed to fetch MulticlusterService")
-				mcs.Spec.ServiceSpec = mcsServiceSpec
-				return kc.CrClient.Update(ctx, mcs)
-			}).WithTimeout(10 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
-
-			multiclusterservice.ValidateMultiClusterService(ctx, kc, multiClusterServiceName, 1)
-
-			waitForServiceDeployments(ctx, kc, sd, mcs.Spec.ServiceSpec.Services)
-			serviceSetObjectKey := serviceset.ObjectKey(kubeutil.DefaultSystemNamespace, sd, mcs)
-			validateClusterProfile(ctx, serviceSetObjectKey, mcs.Spec.ServiceSpec, kc)
-
-			Eventually(func() error {
-				Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(mcs), mcs)).NotTo(HaveOccurred(), "failed to fetch MulticlusterService")
-				mcs.Spec.ServiceSpec.Services[0].Values = "invalid, abcd, not valid, not valid"
-				Expect(kc.CrClient.Update(ctx, mcs)).NotTo(HaveOccurred())
-				return nil
-			}).WithTimeout(1 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
-
-			// TODO validate that the service set service in question is now marked as failed
-		})
-
 		It("Valid multicluster service test", func() {
 			const (
 				multiClusterServiceName       = "test-multicluster"

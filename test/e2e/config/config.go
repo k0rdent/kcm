@@ -30,15 +30,14 @@ import (
 type TestingProvider string
 
 const (
-	TestingProviderAWS        TestingProvider = "aws"
-	TestingProviderAzure      TestingProvider = "azure"
-	TestingProviderGCP        TestingProvider = "gcp"
-	TestingProviderOpenstack  TestingProvider = "openstack"
-	TestingProviderVsphere    TestingProvider = "vsphere"
-	TestingProviderAdopted    TestingProvider = "adopted"
-	TestingProviderRemote     TestingProvider = "remote"
-	TestingProviderDocker     TestingProvider = "docker"
-	TestingProviderMothership TestingProvider = "mothership"
+	TestingProviderAWS       TestingProvider = "aws"
+	TestingProviderAzure     TestingProvider = "azure"
+	TestingProviderGCP       TestingProvider = "gcp"
+	TestingProviderOpenstack TestingProvider = "openstack"
+	TestingProviderVsphere   TestingProvider = "vsphere"
+	TestingProviderAdopted   TestingProvider = "adopted"
+	TestingProviderRemote    TestingProvider = "remote"
+	TestingProviderDocker    TestingProvider = "docker"
 )
 
 type Architecture string
@@ -109,7 +108,6 @@ func initialize() {
 		TestingProviderVsphere,
 		TestingProviderAdopted,
 		TestingProviderRemote,
-		TestingProviderMothership,
 	}
 
 	Config = make(map[TestingProvider][]ProviderTestingConfig)
