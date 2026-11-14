@@ -383,4 +383,13 @@ resources:
   webhooks:
     validation: true
     webhookVersion: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: mirantis.com
+  group: k0rdent
+  kind: NamespacedMultiClusterService
+  path: github.com/k0rdent/kcm/api/v1beta1
+  version: v1beta1
 version: "3"

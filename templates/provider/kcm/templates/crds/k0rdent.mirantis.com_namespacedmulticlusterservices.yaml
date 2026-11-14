@@ -1,0 +1,1211 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+    helm.sh/resource-policy: keep
+  name: namespacedmulticlusterservices.k0rdent.mirantis.com
+spec:
+  group: k0rdent.mirantis.com
+  names:
+    kind: NamespacedMultiClusterService
+    listKind: NamespacedMultiClusterServiceList
+    plural: namespacedmulticlusterservices
+    shortNames:
+      - nmcs
+    singular: namespacedmulticlusterservice
+  scope: Namespaced
+  versions:
+    - additionalPrinterColumns:
+        - description: Number of ready out of total selected clusters
+          jsonPath: .status.conditions[?(@.type=="ClusterInReadyState")].message
+          name: Clusters
+          type: string
+        - description: StateManagementProvider name
+          jsonPath: .spec.serviceSpec.provider.name
+          name: provider
+          type: string
+        - description: Time elapsed since object creation
+          jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v1beta1
+      schema:
+        openAPIV3Schema:
+          description: |-
+            NamespacedMultiClusterService is the Schema for the namespacedmulticlusterservices API.
+            It is the namespace-scoped counterpart of [MultiClusterService] and deliberately shares that
+            type's spec and status: the two objects describe the same desired and observed state, and only
+            differ in scope. Should the two ever need to diverge, the shared types can be split then -
+            doing so changes neither object's serialized form nor its CRD schema.
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: spec defines the desired state
+              minProperties: 0
+              properties:
+                clusterSelector:
+                  description: clusterSelector identifies target clusters to manage services on.
+                  properties:
+                    matchExpressions:
+                      description: matchExpressions is a list of label selector requirements. The requirements are ANDed.
+                      items:
+                        description: |-
+                          A label selector requirement is a selector that contains values, a key, and an operator that
+                          relates the key and values.
+                        properties:
+                          key:
+                            description: key is the label key that the selector applies to.
+                            type: string
+                          operator:
+                            description: |-
+                              operator represents a key's relationship to a set of values.
+                              Valid operators are In, NotIn, Exists and DoesNotExist.
+                            type: string
+                          values:
+                            description: |-
+                              values is an array of string values. If the operator is In or NotIn,
+                              the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                              the values array must be empty. This array is replaced during a strategic
+                              merge patch.
+                            items:
+                              type: string
+                            type: array
+                            x-kubernetes-list-type: atomic
+                        required:
+                          - key
+                          - operator
+                        type: object
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    matchLabels:
+                      additionalProperties:
+                        type: string
+                      description: |-
+                        matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                        map is equivalent to an element of matchExpressions, whose key field is "key", the
+                        operator is "In", and the values array contains only "value". The requirements are ANDed.
+                      type: object
+                  type: object
+                  x-kubernetes-map-type: atomic
+                dependsOn:
+                  description: |-
+                    dependsOn is a list of other objects of the same kind this object depends on.
+                    This object can either be a MultiClusterService or a NamespacedMultiClusterService.
+                    Therefore, each object in this list is identified only by its name because it is
+                    either cluster-scoped or within the same namespace as this object.
+                  items:
+                    minLength: 1
+                    type: string
+                  minItems: 0
+                  type: array
+                  x-kubernetes-list-type: atomic
+                keepServicesOnSelectorMismatch:
+                  description: |-
+                    keepServicesOnSelectorMismatch indicates whether ServiceSets owned by
+                    this object should be preserved on clusters whose labels
+                    no longer match ClusterSelector, including the case where
+                    ClusterSelector is cleared. When true, services already deployed on
+                    such clusters keep running, enabling per-cluster opt-in rollouts driven
+                    by selector changes.
+                  type: boolean
+                serviceSpec:
+                  description: serviceSpec is spec related to deployment of services.
+                  minProperties: 0
+                  properties:
+                    continueOnError:
+                      description: |-
+                        continueOnError specifies if the services deployment should continue if an error occurs.
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
+                      type: boolean
+                    driftExclusions:
+                      description: |-
+                        driftExclusions specifies specific configurations of resources to ignore for drift detection.
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
+                      items:
+                        properties:
+                          paths:
+                            description: Paths is a slice of JSON6902 paths to exclude from configuration drift evaluation.
+                            items:
+                              type: string
+                            type: array
+                          target:
+                            description: Target points to the resources that the paths refers to.
+                            properties:
+                              annotationSelector:
+                                description: |-
+                                  AnnotationSelector is a string that follows the label selection expression
+                                  https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
+                                  It matches with the resource annotations.
+                                type: string
+                              group:
+                                description: |-
+                                  Group is the API group to select resources from.
+                                  Together with Version and Kind it is capable of unambiguously identifying and/or selecting resources.
+                                  https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                                type: string
+                              kind:
+                                description: |-
+                                  Kind of the API Group to select resources from.
+                                  Together with Group and Version it is capable of unambiguously
+                                  identifying and/or selecting resources.
+                                  https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                                type: string
+                              labelSelector:
+                                description: |-
+                                  LabelSelector is a string that follows the label selection expression
+                                  https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
+                                  It matches with the resource labels.
+                                type: string
+                              name:
+                                description: Name to match resources with.
+                                type: string
+                              namespace:
+                                description: Namespace to select resources from.
+                                type: string
+                              version:
+                                description: |-
+                                  Version of the API Group to select resources from.
+                                  Together with Group and Kind it is capable of unambiguously identifying and/or selecting resources.
+                                  https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                                type: string
+                            type: object
+                        required:
+                          - paths
+                        type: object
+                      minItems: 0
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    driftIgnore:
+                      description: |-
+                        driftIgnore specifies resources to ignore for drift detection.
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
+                      items:
+                        properties:
+                          annotationSelector:
+                            description: |-
+                              AnnotationSelector is a string that follows the label selection expression
+                              https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
+                              It matches with the resource annotations.
+                            type: string
+                          group:
+                            description: |-
+                              Group is the API group to select resources from.
+                              Together with Version and Kind it is capable of unambiguously identifying and/or selecting resources.
+                              https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                            type: string
+                          kind:
+                            description: |-
+                              Kind of the API Group to select resources from.
+                              Together with Group and Version it is capable of unambiguously
+                              identifying and/or selecting resources.
+                              https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                            type: string
+                          labelSelector:
+                            description: |-
+                              LabelSelector is a string that follows the label selection expression
+                              https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#api
+                              It matches with the resource labels.
+                            type: string
+                          name:
+                            description: Name to match resources with.
+                            type: string
+                          namespace:
+                            description: Namespace to select resources from.
+                            type: string
+                          version:
+                            description: |-
+                              Version of the API Group to select resources from.
+                              Together with Group and Kind it is capable of unambiguously identifying and/or selecting resources.
+                              https://github.com/kubernetes/community/blob/master/contributors/design-proposals/api-machinery/api-group.md
+                            type: string
+                        type: object
+                      minItems: 0
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    policyRefs:
+                      description: |-
+                        policyRefs references all the ConfigMaps/Secrets/Flux Sources containing kubernetes resources
+                        that need to be deployed in the target clusters.
+                        The values contained in those resources can be static or leverage Go templates for dynamic customization.
+                        When expressed as templates, the values are filled in using information from
+                        resources within the management cluster before deployment (Cluster and TemplateResourceRefs)
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
+                      items:
+                        properties:
+                          deploymentType:
+                            default: Remote
+                            description: |-
+                              DeploymentType indicates whether resources need to be deployed
+                              into the management cluster (local) or the managed cluster (remote)
+                            enum:
+                              - Local
+                              - Remote
+                            type: string
+                          force:
+                            default: false
+                            description: |-
+                              Force indicates whether Sveltos should delete and recreate a resource defined in this
+                              PolicyRef when an update is rejected with an error that only a delete+recreate can
+                              resolve (eg an invalid combination of fields, or a field enforced as immutable).
+                              By default, such errors are surfaced instead of recreating the resource.
+                              This applies to every resource produced by this PolicyRef. To force just one
+                              resource, regardless of this field's value, annotate that resource with
+                              projectsveltos.io/forceRecreate instead.
+                            type: boolean
+                          kind:
+                            description: |-
+                              Kind of the resource. Supported kinds are:
+                              - ConfigMap/Secret
+                              - flux GitRepository;OCIRepository;Bucket
+                              Required when RemoteURL is not set.
+                            enum:
+                              - GitRepository
+                              - OCIRepository
+                              - Bucket
+                              - ConfigMap
+                              - Secret
+                            type: string
+                          name:
+                            description: |-
+                              Name of the referenced resource.
+                              Name can be expressed as a template and instantiate using any cluster field.
+                              Required when RemoteURL is not set.
+                            type: string
+                          namespace:
+                            description: |-
+                              Namespace of the referenced resource.
+                              For ClusterProfile namespace can be left empty. In such a case, namespace will
+                              be implicit set to cluster's namespace.
+                              For Profile namespace must be left empty. Profile namespace will be used.
+                              Namespace can be expressed as a template and instantiate using any cluster field.
+                              Not used when RemoteURL is set.
+                            type: string
+                          optional:
+                            default: false
+                            description: |-
+                              Optional indicates that the referenced resource is not mandatory.
+                              If set to true and the resource is not found, the error will be ignored,
+                              and Sveltos will continue processing other PolicyRefs.
+                            type: boolean
+                          path:
+                            description: |-
+                              Path to the directory containing the YAML files.
+                              Defaults to 'None', which translates to the root path of the SourceRef.
+                              Used only for GitRepository;OCIRepository;Bucket
+                              This value can be static or leverage Go templates for dynamic customization.
+                              When expressed as a template, it is filled in using information from
+                              resources within the management cluster before deployment (Cluster and TemplateResourceRefs)
+                            type: string
+                          remoteURL:
+                            description: |-
+                              RemoteURL configures fetching content from an HTTP/HTTPS endpoint or an OCI registry.
+                              When set, Kind/Name/Namespace must be omitted.
+                            properties:
+                              insecureSkipTLSVerify:
+                                default: false
+                                description: |-
+                                  InsecureSkipTLSVerify controls server certificate verification.
+                                  Ignored if the referenced SecretRef provides a "caFile".
+                                type: boolean
+                              interval:
+                                description: |-
+                                  Interval defines how often Sveltos re-fetches the source to detect changes.
+                                  Defaults to 5 minutes.
+                                type: string
+                              plainHTTP:
+                                default: false
+                                description: |-
+                                  PlainHTTP indicates to use insecure HTTP connections when URL uses the
+                                  "oci://" scheme. Ignored for "http://"/"https://" URLs.
+                                type: boolean
+                              secretRef:
+                                description: |-
+                                  SecretRef references a Secret in the management cluster containing optional
+                                  credentials for fetching the source. Both Name and Namespace must be set,
+                                  allowing the Secret to live in any namespace (e.g. projectsveltos) so that
+                                  a single Secret can be shared across clusters without replication.
+                                  Supported Secret keys:
+                                    "token"              — Bearer token (Authorization: Bearer <token>)
+                                    "username"+"password" — HTTP Basic Auth or OCI registry basic auth
+                                    "caFile"             — PEM-encoded CA certificate for TLS verification
+                                properties:
+                                  name:
+                                    description: name is unique within a namespace to reference a secret resource.
+                                    type: string
+                                  namespace:
+                                    description: namespace defines the space within which the secret name must be unique.
+                                    type: string
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              template:
+                                description: |-
+                                  Template indicates that the fetched content is a Go template that
+                                  must be instantiated using cluster fields and templateResourceRefs values
+                                  before deployment. Equivalent to the projectsveltos.io/template annotation
+                                  on a ConfigMap or Secret.
+                                type: boolean
+                              url:
+                                description: |-
+                                  URL is the remote source serving raw YAML/JSON content.
+                                  Sveltos fetches the content on every reconciliation and redeploys if the
+                                  content hash has changed.
+                                  Supported schemes:
+                                    "http://" or "https://" — HTTP/HTTPS endpoint returning a raw YAML/JSON
+                                                              document, a gzip-compressed document, an
+                                                              uncompressed tar, or a gzip-compressed tar of
+                                                              .yaml/.yml/.json files
+                                    "oci://"                — OCI registry artifact whose layers are accepted
+                                                              in the same shapes: raw YAML/JSON, gzip-compressed
+                                                              YAML/JSON, uncompressed tar, or gzip-compressed tar
+                                  URL can be expressed as a template and instantiated using any cluster field,
+                                  so a single profile can fetch different content for each matching cluster,
+                                  e.g. "oci://registry.example/space/app-{{"{{"}} .Cluster.metadata.name }}:latest".
+                                pattern: ^(https?|oci)://
+                                type: string
+                            required:
+                              - url
+                            type: object
+                          skipNamespaceCreation:
+                            default: false
+                            description: |-
+                              SkipNamespaceCreation indicates whether Sveltos should skip creating the namespace
+                              for namespaced resources defined in this PolicyRef.
+                              This field is ignored for cluster-scoped resources.
+                              By default, Sveltos attempts to get or create the target namespace if it does not exist.
+                              Setting this to true avoids those calls, which is necessary when Sveltos lacks
+                              permissions to manage namespaces at the cluster level.
+                            type: boolean
+                          tier:
+                            default: 100
+                            description: |-
+                              Tier controls the order of deployment for resources coming from different PolicyRefs
+                              within the same ClusterProfile or Profile.
+                              When two PolicyRefs attempt to deploy the same resource, the PolicyRef with the lowest
+                              Tier value takes priority and deploys/updates the resource.
+                              This priority mechanism is only checked after the parent ClusterProfile has won
+                              the primary conflict resolution against other ClusterProfiles.
+                              Higher Tier values represent lower priority. The default Tier value is 100.
+                            format: int32
+                            minimum: 1
+                            type: integer
+                        type: object
+                        x-kubernetes-validations:
+                          - message: either remoteURL or kind must be set, but not both
+                            rule: has(self.remoteURL) != has(self.kind)
+                      minItems: 0
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    priority:
+                      default: 100
+                      description: |-
+                        priority sets the priority for the services defined in this spec.
+                        Higher value means higher priority and lower means lower.
+                        In case of conflict with another object managing the service,
+                        the one with higher priority will get to deploy its services.
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
+                      format: int32
+                      maximum: 2147483646
+                      minimum: 1
+                      type: integer
+                    provider:
+                      description: provider is the definition of the provider to use to deploy services.
+                      minProperties: 1
+                      properties:
+                        config:
+                          description: config is the provider-specific configuration applied to the produced objects.
+                          x-kubernetes-preserve-unknown-fields: true
+                        name:
+                          description: name is the name of the [StateManagementProvider] object.
+                          minLength: 1
+                          type: string
+                          x-kubernetes-validations:
+                            - message: Provider name is immutable once set
+                              rule: oldSelf == '' || self == oldSelf
+                        selfManagement:
+                          description: |-
+                            selfManagement flag defines whether resources must be deployed to the management cluster itself.
+                            This field is ignored if set for ClusterDeployment or NamespacedMultiClusterService.
+                          type: boolean
+                      type: object
+                    reload:
+                      description: |-
+                        reload instances via rolling upgrade when a ConfigMap/Secret mounted as volume is modified.
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
+                      type: boolean
+                    services:
+                      description: |-
+                        services is a list of services created via ServiceTemplates
+                        that could be installed on the target cluster.
+                      items:
+                        description: Service represents a Service to be deployed.
+                        properties:
+                          dependsOn:
+                            description: dependsOn specifies a list of other services that this service depends on.
+                            items:
+                              description: ServiceDependsOn identifies a service by its release name and namespace.
+                              properties:
+                                name:
+                                  description: name is the release name on target cluster.
+                                  maxLength: 253
+                                  minLength: 1
+                                  type: string
+                                namespace:
+                                  description: namespace is the release namespace on target cluster.
+                                  minLength: 1
+                                  type: string
+                              required:
+                                - name
+                              type: object
+                            minItems: 0
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          disable:
+                            description: disable can be set to disable handling of this service.
+                            type: boolean
+                          helmAction:
+                            description: helmAction specifies the action to take on a Helm chart
+                            enum:
+                              - Install
+                              - Uninstall
+                            type: string
+                          helmOptions:
+                            description: helmOptions are the options to be passed to the provider for helm installation or updates
+                            minProperties: 1
+                            properties:
+                              atomic:
+                                description: |-
+                                  atomic deletes the installation or upgrade on failure when set.
+                                  The --wait flag will be set automatically if --atomic is used
+                                type: boolean
+                              createNamespace:
+                                description: |-
+                                  createNamespace controls whether to create the release namespace
+
+                                  Deprecated: use .installOptions.createNamespace instead.
+                                type: boolean
+                              dependencyUpdate:
+                                description: dependencyUpdate updates dependencies if they are missing before installing the chart
+                                type: boolean
+                              description:
+                                description: description is the description of a Helm operation
+                                minLength: 1
+                                type: string
+                              disableHooks:
+                                description: disableHooks prevents hooks from running during install, upgrade, or uninstall
+                                type: boolean
+                              disableOpenAPIValidation:
+                                description: disableOpenAPIValidation skips validation of rendered templates against the Kubernetes OpenAPI schema
+                                type: boolean
+                              enableClientCache:
+                                description: enableClientCache is a flag to enable Helm client cache. If it is not specified, it will be set to false.
+                                type: boolean
+                              installOptions:
+                                description: installOptions are options specific to helm install
+                                properties:
+                                  createNamespace:
+                                    default: true
+                                    description: Create the release namespace if not present. Defaults to true
+                                    type: boolean
+                                  disableHooks:
+                                    default: false
+                                    description: |-
+                                      prevent hooks from running during install. If set to true, overrides
+                                      DisableHooks in HelmOptions. Use this one when you want to selective
+                                      disable hooks on install
+                                      Default to false
+                                    type: boolean
+                                  recoverAfterConsecutiveFailures:
+                                    default: 5
+                                    description: |-
+                                      RecoverAfterConsecutiveFailures is the number of consecutive install failures for this
+                                      chart after which Sveltos uninstalls any existing release under this name before
+                                      retrying, to clear potentially stale Helm release history that would otherwise keep
+                                      blocking every subsequent install attempt. This only ever runs when there is no
+                                      currently deployed release to protect: a release that is deployed, or mid-upgrade, or
+                                      failed while already existing, is always retried through helm upgrade instead, never
+                                      through this. It only applies to a release that was never successfully installed, or
+                                      was already cleanly uninstalled.
+                                      Default to 5
+                                    type: integer
+                                  replace:
+                                    default: true
+                                    description: Replaces if set indicates to replace an older release with this one
+                                    type: boolean
+                                  takeOwnership:
+                                    default: false
+                                    description: |-
+                                      if set, install will ignore the check for helm annotations
+                                      and take ownership of the existing resources
+                                    type: boolean
+                                type: object
+                              labels:
+                                additionalProperties:
+                                  type: string
+                                description: labels that would be added to release metadata.
+                                minProperties: 0
+                                type: object
+                              replace:
+                                description: |-
+                                  replace controls whether an existing release name can be reused
+
+                                  Deprecated: use .installOptions.replace instead.
+                                type: boolean
+                              skipCRDs:
+                                description: |-
+                                  skipCRDs controls whether CRDs should be installed during install/upgrade operation.
+                                  By default, CRDs are installed if not already present.
+                                type: boolean
+                              skipSchemaValidation:
+                                description: skipSchemaValidation determines if JSON schema validation is disabled.
+                                type: boolean
+                              timeout:
+                                description: timeout is the time to wait for an individual Kubernetes operation such as a hook Job
+                                type: string
+                              uninstallOptions:
+                                description: uninstallOptions are options specific to helm uninstall
+                                properties:
+                                  deletionPropagation:
+                                    description: DeletionPropagation
+                                    enum:
+                                      - orphan
+                                      - foreground
+                                      - background
+                                    type: string
+                                  disableHooks:
+                                    default: false
+                                    description: |-
+                                      prevent hooks from running during install. If set to true, overrides
+                                      DisableHooks in HelmOptions. Use this one when you want to selective
+                                      disable hooks on uninstall
+                                      Default to false
+                                    type: boolean
+                                  keepHistory:
+                                    description: |-
+                                      When uninstall a chart with this flag, Helm removes the resources associated with the chart,
+                                      but it keeps the release information. This allows to see details about the uninstalled release
+                                      using the helm history command.
+                                    type: boolean
+                                type: object
+                              upgradeOptions:
+                                description: upgradeOptions are options specific to helm upgrade
+                                properties:
+                                  cleanupOnFail:
+                                    default: false
+                                    description: CleanupOnFail will, if true, cause the upgrade to delete newly-created resources on a failed update.
+                                    type: boolean
+                                  disableHooks:
+                                    default: false
+                                    description: |-
+                                      prevent hooks from running during install. If set to true, overrides
+                                      DisableHooks in HelmOptions. Use this one when you want to selective
+                                      disable hooks on upgrade
+                                      Default to false
+                                    type: boolean
+                                  force:
+                                    default: false
+                                    description: |-
+                                      Force will, if set to `true`, ignore certain warnings and perform the upgrade anyway.
+                                      This should be used with caution.
+                                    type: boolean
+                                  maxHistory:
+                                    default: 2
+                                    description: |-
+                                      MaxHistory limits the maximum number of revisions saved per release
+                                      Default to 2
+                                    type: integer
+                                  recreate:
+                                    default: false
+                                    description: |-
+                                      Recreate will (if true) recreate pods after a rollback.
+
+                                      Deprecated: This field is no longer supported
+                                    type: boolean
+                                  resetThenReuseValues:
+                                    default: false
+                                    description: ResetThenReuseValues will reset the values to the chart's built-ins then merge with user's last supplied values.
+                                    type: boolean
+                                  resetValues:
+                                    default: false
+                                    description: ResetValues will reset the values to the chart's built-ins rather than merging with existing.
+                                    type: boolean
+                                  reuseValues:
+                                    default: false
+                                    description: |-
+                                      ReuseValues copies values from the current release to a new release if the
+                                      new release does not have any values. If the request already has values,
+                                      or if there are no values in the current release, this does nothing.
+                                      This is skipped if the ResetValues flag is set, in which case the
+                                      request values are not altered.
+                                    type: boolean
+                                  subNotes:
+                                    default: false
+                                    description: SubNotes determines whether sub-notes are rendered in the chart.
+                                    type: boolean
+                                  takeOwnership:
+                                    default: false
+                                    description: |-
+                                      if set, upgrade will ignore the check for helm annotations
+                                      and take ownership of the existing resources
+                                    type: boolean
+                                  upgradeCRDs:
+                                    default: false
+                                    description: |-
+                                      UpgradeCRDs upgrade CRDs from the Helm Chart's crds directory
+                                      By default, CRDs are not applied during Helm upgrade action by Helm
+                                      https://helm.sh/docs/chart_best_practices/custom_resource_definitions/
+                                    type: boolean
+                                type: object
+                              wait:
+                                description: |-
+                                  wait blocks until all Pods, PVCs, Services, and the minimum number of Pods of a Deployment, StatefulSet, or ReplicaSet
+                                  are in a ready state before marking the release as successful. It will wait for as long as --timeout
+                                type: boolean
+                              waitForJobs:
+                                description: |-
+                                  waitForJobs blocks until all Jobs complete before marking the release as successful when --wait is enabled.
+                                  It will wait for as long as --timeout
+                                type: boolean
+                            type: object
+                          name:
+                            description: name is the chart release.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                          namespace:
+                            default: default
+                            description: |-
+                              namespace is the namespace the release will be installed in.
+                              It will default to "default" if not provided.
+                            minLength: 1
+                            type: string
+                          template:
+                            description: template is a reference to a Template object located in the same namespace.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                          templateChain:
+                            description: |-
+                              templateChain defines the ServiceTemplateChain object that will be used to deploy the service
+                              along with desired ServiceTemplate version.
+                            minLength: 1
+                            type: string
+                          values:
+                            description: |-
+                              values is the helm values to be passed to the chart used by the template.
+                              The string type is used in order to allow for templating.
+                            minLength: 1
+                            type: string
+                          valuesFrom:
+                            description: valuesFrom can reference a ConfigMap or Secret containing helm values.
+                            items:
+                              description: |-
+                                ValuesFrom is the source of the values to pass to the ServiceTemplate. The source
+                                can be a ConfigMap or a Secret located in the same namespace as the ServiceSet.
+                              properties:
+                                kind:
+                                  description: kind is the kind of the source.
+                                  enum:
+                                    - ConfigMap
+                                    - Secret
+                                  type: string
+                                name:
+                                  description: name is the name of the source.
+                                  minLength: 1
+                                  type: string
+                              required:
+                                - kind
+                                - name
+                              type: object
+                            minItems: 0
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          version:
+                            description: version is the version of the service template.
+                            minLength: 1
+                            type: string
+                        required:
+                          - name
+                          - template
+                        type: object
+                      minItems: 0
+                      type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                        - namespace
+                      x-kubernetes-list-type: map
+                    stopOnConflict:
+                      description: |-
+                        stopOnConflict specifies what to do in case of a conflict.
+                        E.g. If another object is already managing a service.
+                        By default the remaining services will be deployed even if conflict is detected.
+                        If set to true, the deployment will stop after encountering the first conflict.
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
+                      type: boolean
+                    syncMode:
+                      default: Continuous
+                      description: |-
+                        syncMode specifies how services are synced in the target cluster.
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
+                      enum:
+                        - OneTime
+                        - Continuous
+                        - ContinuousWithDriftDetection
+                        - DryRun
+                      type: string
+                    templateResourceRefs:
+                      description: |-
+                        templateResourceRefs is a list of resources to collect from the management cluster,
+                        the values from which can be used in templates.
+
+                        Deprecated: use .provider.config field to define provider-specific configuration.
+                      items:
+                        properties:
+                          identifier:
+                            description: |-
+                              Identifier is how the resource will be referred to in the
+                              template
+                            type: string
+                          ignoreStatusChanges:
+                            default: false
+                            description: |-
+                              IgnoreStatusChanges indicates whether changes to the status of the referenced
+                              resource should be ignored. If set to true, only changes to the spec or
+                              metadata (generation change) will trigger a reconciliation.
+                            type: boolean
+                          optional:
+                            default: false
+                            description: |-
+                              Optional indicates that the referenced resource is not mandatory.
+                              If set to true and the resource is not found, the error will be ignored,
+                              and Sveltos will continue processing other TemplateResourceRefs.
+                            type: boolean
+                          resource:
+                            description: |-
+                              Resource references a Kubernetes instance in the management
+                              cluster to fetch and use during template instantiation.
+                              For ClusterProfile namespace can be left empty. In such a case, namespace will
+                              be implicit set to cluster's namespace.
+                              Name and namespace can be expressed as a template and instantiate using any cluster field.
+                            properties:
+                              apiVersion:
+                                description: API version of the referent.
+                                type: string
+                              fieldPath:
+                                description: |-
+                                  If referring to a piece of an object instead of an entire object, this string
+                                  should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                                  For example, if the object reference is to a container within a pod, this would take on a value like:
+                                  "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                                  the event) or if no container name is specified "spec.containers[2]" (container with
+                                  index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                                  referencing a part of an object.
+                                type: string
+                              kind:
+                                description: |-
+                                  Kind of the referent.
+                                  More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                                type: string
+                              name:
+                                description: |-
+                                  Name of the referent.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              namespace:
+                                description: |-
+                                  Namespace of the referent.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                                type: string
+                              resourceVersion:
+                                description: |-
+                                  Specific resourceVersion to which this reference is made, if any.
+                                  More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                                type: string
+                              uid:
+                                description: |-
+                                  UID of the referent.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                                type: string
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          watchFields:
+                            description: |-
+                              WatchFields is an optional list of dot-separated field paths to include
+                              when computing the hash for this resource (e.g. "status.readyReplicas",
+                              "metadata.labels"). When non-empty, only the listed fields are hashed and
+                              IgnoreStatusChanges is ignored. Use this when you need to react to a
+                              specific field without being sensitive to every other change on the object.
+                            items:
+                              type: string
+                            type: array
+                        required:
+                          - identifier
+                          - resource
+                        type: object
+                      minItems: 0
+                      type: array
+                      x-kubernetes-list-type: atomic
+                  type: object
+              type: object
+            status:
+              description: status describes the observed state
+              minProperties: 1
+              properties:
+                conditions:
+                  description: conditions contains details for the current state of the MultiClusterService.
+                  items:
+                    description: Condition contains details for one aspect of the current state of this API Resource.
+                    properties:
+                      lastTransitionTime:
+                        description: |-
+                          lastTransitionTime is the last time the condition transitioned from one status to another.
+                          This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                        format: date-time
+                        type: string
+                      message:
+                        description: |-
+                          message is a human readable message indicating details about the transition.
+                          This may be an empty string.
+                        maxLength: 32768
+                        type: string
+                      observedGeneration:
+                        description: |-
+                          observedGeneration represents the .metadata.generation that the condition was set based upon.
+                          For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                          with respect to the current state of the instance.
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      reason:
+                        description: |-
+                          reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                          Producers of specific condition types may define expected values and meanings for this field,
+                          and whether the values are considered a guaranteed API.
+                          The value should be a CamelCase string.
+                          This field may not be empty.
+                        maxLength: 1024
+                        minLength: 1
+                        pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                        type: string
+                      status:
+                        description: status of the condition, one of True, False, Unknown.
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                        type: string
+                      type:
+                        description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                        maxLength: 316
+                        pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                        type: string
+                    required:
+                      - lastTransitionTime
+                      - message
+                      - reason
+                      - status
+                      - type
+                    type: object
+                  minItems: 0
+                  type: array
+                  x-kubernetes-list-map-keys:
+                    - type
+                  x-kubernetes-list-type: map
+                matchingClusters:
+                  description: matchingClusters contains a list of clusters matching this object's selector
+                  items:
+                    description: MatchingCluster is a cluster matching the given selector.
+                    minProperties: 1
+                    properties:
+                      apiVersion:
+                        description: API version of the referent.
+                        type: string
+                      deployed:
+                        description: deployed indicates whether all services were successfully deployed.
+                        type: boolean
+                      fieldPath:
+                        description: |-
+                          If referring to a piece of an object instead of an entire object, this string
+                          should contain a valid JSON/Go field access statement, such as desiredState.manifest.containers[2].
+                          For example, if the object reference is to a container within a pod, this would take on a value like:
+                          "spec.containers{name}" (where "name" refers to the name of the container that triggered
+                          the event) or if no container name is specified "spec.containers[2]" (container with
+                          index 2 in this pod). This syntax is chosen only to have some well-defined way of
+                          referencing a part of an object.
+                        type: string
+                      kind:
+                        description: |-
+                          Kind of the referent.
+                          More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+                        type: string
+                      lastTransitionTime:
+                        description: lastTransitionTime reflects when Deployed state was changed last time.
+                        format: date-time
+                        type: string
+                      message:
+                        description: message is a human-readable explanation of Reason.
+                        minLength: 1
+                        type: string
+                      name:
+                        description: |-
+                          Name of the referent.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace of the referent.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+                        type: string
+                      reason:
+                        description: |-
+                          reason is a brief machine-readable explanation for why services are not yet
+                          Deployed on this cluster, e.g. MultiClusterServiceDependencyNotReady when this
+                          MultiClusterService is waiting for a MultiClusterService it depends on to finish
+                          deploying its services here.
+                        minLength: 1
+                        type: string
+                      regional:
+                        description: regional indicates whether given cluster is regional.
+                        type: boolean
+                      resourceVersion:
+                        description: |-
+                          Specific resourceVersion to which this reference is made, if any.
+                          More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+                        type: string
+                      uid:
+                        description: |-
+                          UID of the referent.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  minItems: 0
+                  type: array
+                  x-kubernetes-list-type: atomic
+                observedGeneration:
+                  description: observedGeneration is the last observed generation.
+                  format: int64
+                  minimum: 1
+                  type: integer
+                services:
+                  description: services contains details for the state of services.
+                  items:
+                    description: ServiceState is the state of a Service
+                    properties:
+                      conditions:
+                        description: conditions is a list of conditions for the Service
+                        items:
+                          description: Condition contains details for one aspect of the current state of this API Resource.
+                          properties:
+                            lastTransitionTime:
+                              description: |-
+                                lastTransitionTime is the last time the condition transitioned from one status to another.
+                                This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                              format: date-time
+                              type: string
+                            message:
+                              description: |-
+                                message is a human readable message indicating details about the transition.
+                                This may be an empty string.
+                              maxLength: 32768
+                              type: string
+                            observedGeneration:
+                              description: |-
+                                observedGeneration represents the .metadata.generation that the condition was set based upon.
+                                For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                                with respect to the current state of the instance.
+                              format: int64
+                              minimum: 0
+                              type: integer
+                            reason:
+                              description: |-
+                                reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                                Producers of specific condition types may define expected values and meanings for this field,
+                                and whether the values are considered a guaranteed API.
+                                The value should be a CamelCase string.
+                                This field may not be empty.
+                              maxLength: 1024
+                              minLength: 1
+                              pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                              type: string
+                            status:
+                              description: status of the condition, one of True, False, Unknown.
+                              enum:
+                                - "True"
+                                - "False"
+                                - Unknown
+                              type: string
+                            type:
+                              description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                              maxLength: 316
+                              pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                              type: string
+                          required:
+                            - lastTransitionTime
+                            - message
+                            - reason
+                            - status
+                            - type
+                          type: object
+                        minItems: 0
+                        type: array
+                        x-kubernetes-list-map-keys:
+                          - type
+                        x-kubernetes-list-type: map
+                      failureMessage:
+                        description: failureMessage is the reason why the Service failed to deploy
+                        minLength: 1
+                        type: string
+                      lastDeployedHash:
+                        description: |-
+                          lastDeployedHash is the verifier's fingerprint of the provider-side
+                          configuration this service was most recently confirmed Deployed at.
+                          Used to recognise that a progressing state reported by the provider is
+                          transient noise from an unrelated apply (rather than a real change to
+                          this service) and to promote back to Deployed safely.
+                        minLength: 1
+                        type: string
+                      lastStateTransitionTime:
+                        description: lastStateTransitionTime is the time the State was last transitioned
+                        format: date-time
+                        type: string
+                      name:
+                        description: name is the name of the Service
+                        minLength: 1
+                        type: string
+                      namespace:
+                        description: namespace is the namespace of the Service. Empty value means default namespace.
+                        minLength: 0
+                        type: string
+                      state:
+                        description: state is the state of the Service
+                        enum:
+                          - Deployed
+                          - Provisioning
+                          - Failed
+                          - Pending
+                          - Deleting
+                          - Deleted
+                        type: string
+                      template:
+                        description: template is the name of the ServiceTemplate used to deploy the Service
+                        minLength: 1
+                        type: string
+                      type:
+                        description: type is the type of the deployment method for the Service
+                        enum:
+                          - Helm
+                          - Kustomize
+                          - Resource
+                        type: string
+                      version:
+                        description: version is the version of the Service
+                        minLength: 1
+                        type: string
+                    required:
+                      - lastStateTransitionTime
+                      - name
+                      - namespace
+                      - state
+                      - template
+                      - type
+                    type: object
+                  minItems: 0
+                  type: array
+                  x-kubernetes-list-type: atomic
+                servicesUpgradePaths:
+                  description: servicesUpgradePaths contains details for the state of services upgrade paths.
+                  items:
+                    description: ServiceUpgradePaths contains details for the state of service upgrade paths.
+                    properties:
+                      availableUpgrades:
+                        description: availableUpgrades contains details for the state of available upgrades.
+                        items:
+                          description: UpgradePath contains details for the state of service upgrade paths.
+                          minProperties: 0
+                          properties:
+                            upgradePaths:
+                              description: |-
+                                upgradePaths contains versions that the service can be upgraded to
+
+                                Deprecated: use Versions to define versions that service can be upgraded to.
+                              items:
+                                minLength: 1
+                                type: string
+                              minItems: 0
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            versions:
+                              description: versions contains the list of versions that service can be upgraded to.
+                              items:
+                                description: AvailableUpgrade is the definition of the available upgrade for the Template
+                                properties:
+                                  name:
+                                    description: name is the name of the Template to which the upgrade is available.
+                                    minLength: 1
+                                    type: string
+                                  version:
+                                    description: version is the version of the Template to which the upgrade is available.
+                                    minLength: 1
+                                    type: string
+                                required:
+                                  - name
+                                type: object
+                              minItems: 0
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          type: object
+                        minItems: 0
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      name:
+                        description: name is the name of the service.
+                        minLength: 1
+                        type: string
+                      namespace:
+                        description: namespace is the namespace of the service.
+                        minLength: 1
+                        type: string
+                      template:
+                        description: template is the name of the current service template.
+                        minLength: 1
+                        type: string
+                    required:
+                      - name
+                      - namespace
+                      - template
+                    type: object
+                  minItems: 0
+                  type: array
+                  x-kubernetes-list-type: atomic
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}

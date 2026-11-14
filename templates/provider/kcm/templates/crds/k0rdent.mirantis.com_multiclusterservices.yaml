@@ -105,7 +105,11 @@ spec:
                   type: object
                   x-kubernetes-map-type: atomic
                 dependsOn:
-                  description: dependsOn is a list of other MultiClusterServices this one depends on.
+                  description: |-
+                    dependsOn is a list of other objects of the same kind this object depends on.
+                    This object can either be a MultiClusterService or a NamespacedMultiClusterService.
+                    Therefore, each object in this list is identified only by its name because it is
+                    either cluster-scoped or within the same namespace as this object.
                   items:
                     minLength: 1
                     type: string
@@ -115,7 +119,7 @@ spec:
                 keepServicesOnSelectorMismatch:
                   description: |-
                     keepServicesOnSelectorMismatch indicates whether ServiceSets owned by
-                    this MultiClusterService should be preserved on clusters whose labels
+                    this object should be preserved on clusters whose labels
                     no longer match ClusterSelector, including the case where
                     ClusterSelector is cleared. When true, services already deployed on
                     such clusters keep running, enabling per-cluster opt-in rollouts driven
@@ -442,7 +446,7 @@ spec:
                         selfManagement:
                           description: |-
                             selfManagement flag defines whether resources must be deployed to the management cluster itself.
-                            This field is ignored if set for ClusterDeployment.
+                            This field is ignored if set for ClusterDeployment or NamespacedMultiClusterService.
                           type: boolean
                       type: object
                     reload:
@@ -932,7 +936,7 @@ spec:
                     - type
                   x-kubernetes-list-type: map
                 matchingClusters:
-                  description: matchingClusters contains a list of clusters matching MultiClusterService selector
+                  description: matchingClusters contains a list of clusters matching this object's selector
                   items:
                     description: MatchingCluster is a cluster matching the given selector.
                     minProperties: 1

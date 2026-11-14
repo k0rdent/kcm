@@ -100,7 +100,7 @@ func TestValidateMCSDelete(t *testing.T) {
 
 		mcs := &kcmv1.MultiClusterService{Name: "mcs1"}
 		err := ValidateMCSDelete(context.Background(), c, mcs)
-		if err == nil || !strings.Contains(err.Error(), "other MultiClusterServices depend on it") {
+		if err == nil || !strings.Contains(err.Error(), "other MultiClusterServices/NamespacedMultiClusterServices depend on it") {
 			t.Fatalf("err = %v, want dependents-exist error", err)
 		}
 	})
