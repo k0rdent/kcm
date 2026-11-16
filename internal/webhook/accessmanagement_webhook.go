@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"slices"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -27,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	accessmanagementutil "github.com/K0rdent/kcm/internal/util/accessmanagement"
 )
 
 var errAccessManagementDeletionForbidden = errors.New("AccessManagement deletion is forbidden")
@@ -76,12 +78,36 @@ func (v *AccessManagementValidator) ValidateCreate(ctx context.Context, am *kcmv
 		return nil, errors.New("AccessManagement object already exists")
 	}
 
-	return v.validateAccessRules(am.Spec.AccessRules)
+	warnings, err := v.validateAccessRules(am.Spec.AccessRules)
+	if err != nil {
+		return warnings, err
+	}
+
+	removalWarnings, err := v.validateClusterTemplateRemovals(ctx, nil, am)
+	return append(warnings, removalWarnings...), err
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type.
-func (v *AccessManagementValidator) ValidateUpdate(_ context.Context, _, newAM *kcmv1.AccessManagement) (admission.Warnings, error) {
-	return v.validateAccessRules(newAM.Spec.AccessRules)
+func (v *AccessManagementValidator) ValidateUpdate(ctx context.Context, oldAM, newAM *kcmv1.AccessManagement) (admission.Warnings, error) {
+	warnings, err := v.validateAccessRules(newAM.Spec.AccessRules)
+	if err != nil {
+		return warnings, err
+	}
+
+	// rules left as they are remove nothing that was not already pending, so there is nothing to
+	// plan: this also keeps metadata-only updates, the controller's own included, from failing on
+	// stored rules that cannot be planned
+	if accessRulesUnchanged(oldAM, newAM) {
+		return warnings, nil
+	}
+
+	// the status is the controller's record of the Kinds it still handles, so it is read from the
+	// stored object rather than from whatever the update carries
+	updated := *newAM
+	updated.Status = oldAM.Status
+
+	removalWarnings, err := v.validateClusterTemplateRemovals(ctx, oldAM, &updated)
+	return append(warnings, removalWarnings...), err
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type.
@@ -111,6 +137,74 @@ func (v *AccessManagementValidator) ValidateDelete(ctx context.Context, _ *kcmv1
 func (*AccessManagementValidator) Default(_ context.Context, am *kcmv1.AccessManagement) error {
 	am.MigrateAccessRules()
 	return nil
+}
+
+// validateClusterTemplateRemovals runs the ClusterTemplate deletion validation against every
+// ClusterTemplate that reconciling am would delete, worked out by the same plan the controller
+// acts on. An update whose removals the controller could not carry out is rejected up front,
+// rather than accepted and then left failing in the AccessManagement status for as long as, say,
+// a ClusterDeployment still uses the ClusterTemplate.
+//
+// Only the removals am introduces over old, the stored object (nil on create), are validated: one
+// old already had pending, such as a copy left behind by a namespace relabeled out of a selector,
+// is not this update's doing, and must not get in the way of every unrelated update, the
+// controller's own metadata updates included.
+func (v *AccessManagementValidator) validateClusterTemplateRemovals(ctx context.Context, old, am *kcmv1.AccessManagement) (admission.Warnings, error) {
+	toRemove, err := accessmanagementutil.ClusterTemplatesToRemove(ctx, v.Client, v.SystemNamespace, am)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find the ClusterTemplates the AccessManagement would remove: %w", err)
+	}
+
+	if old != nil && len(toRemove) > 0 {
+		// an old spec that cannot be planned, such as one with an invalid selector, has nothing
+		// pending to go by: every removal is validated then, and the update fixing it still goes
+		// through
+		if pending, err := accessmanagementutil.ClusterTemplatesToRemove(ctx, v.Client, v.SystemNamespace, old); err == nil {
+			pendingKeys := make(map[client.ObjectKey]struct{}, len(pending))
+			for _, template := range pending {
+				pendingKeys[client.ObjectKeyFromObject(template)] = struct{}{}
+			}
+
+			toRemove = slices.DeleteFunc(toRemove, func(template *kcmv1.ClusterTemplate) bool {
+				_, ok := pendingKeys[client.ObjectKeyFromObject(template)]
+				return ok
+			})
+		}
+	}
+
+	var (
+		templateValidator = newClusterTemplateValidator(v.Client, v.SystemNamespace)
+		warnings          admission.Warnings
+		errs              error
+	)
+	for _, template := range toRemove {
+		templateWarnings, err := templateValidator.ValidateDelete(ctx, template)
+		switch {
+		case err == nil:
+			continue
+		case errors.Is(err, errTemplateDeletionForbidden):
+			for _, warning := range templateWarnings {
+				warnings = append(warnings, fmt.Sprintf("%s/%s: %s", template.Namespace, template.Name, warning))
+			}
+			errs = errors.Join(errs, fmt.Errorf("the update would remove the ClusterTemplate %s/%s: %w", template.Namespace, template.Name, err))
+		default:
+			// the check itself failed, e.g. a lookup it makes: not a verdict on the removal
+			errs = errors.Join(errs, fmt.Errorf("failed to check whether the ClusterTemplate %s/%s can be removed: %w", template.Namespace, template.Name, err))
+		}
+	}
+
+	return warnings, errs
+}
+
+// accessRulesUnchanged reports whether oldAM and newAM carry the same access rules once the
+// deprecated selectors of both are migrated and defaulted, the way the mutating webhook does on
+// write: a stored object written while it was unavailable still matches its migrated update.
+func accessRulesUnchanged(oldAM, newAM *kcmv1.AccessManagement) bool {
+	oldMigrated, newMigrated := oldAM.DeepCopy(), newAM.DeepCopy()
+	oldMigrated.MigrateAccessRules()
+	newMigrated.MigrateAccessRules()
+
+	return equality.Semantic.DeepEqual(oldMigrated.Spec.AccessRules, newMigrated.Spec.AccessRules)
 }
 
 // validateAccessRules validates the generic Resources entries of every AccessRule: the

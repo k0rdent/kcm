@@ -391,34 +391,23 @@ func FilterServiceDependencies(
 	// Services that are already deployed but have unsatisfied dependencies
 	// (locked) are intentionally excluded here; BuildServicesList preserves
 	// them at their current version by carrying them over from the stored spec.
+	//
+	// Ranging over desiredServices rather than the maps keeps the result in the
+	// order the owner listed the services. That order is all this function
+	// promises: BuildServicesList orders the final spec by dependency.
 	var filtered []kcmv1.Service
-	for svc, count := range dependsOnCount {
-		if count <= 0 {
-			idx := serviceIdx[ServiceKey(svc.Namespace, svc.Name)]
-			filtered = append(filtered, desiredServices[idx])
+	for _, svc := range desiredServices {
+		if dependsOnCount[ServiceKey(svc.Namespace, svc.Name)] <= 0 {
+			filtered = append(filtered, svc)
 		}
 	}
 
-	// Sort for deterministic ordering across reconcile cycles: filtered is built by
-	// ranging over a map, and sortByDependency only refines whatever order it is
-	// given. Without this the ServiceSet spec would be rewritten on every pass.
-	slices.SortFunc(filtered, func(a, b kcmv1.Service) int {
-		aKey := ServiceKey(a.Namespace, a.Name)
-		bKey := ServiceKey(b.Namespace, b.Name)
-
-		if n := cmp.Compare(aKey.Namespace, bKey.Namespace); n != 0 {
-			return n
-		}
-		return cmp.Compare(aKey.Name, bKey.Name)
-	})
-
-	return sortByDependency(filtered), nil
+	return filtered, nil
 }
 
-// sortByDependency puts a dependency ahead of its dependents within one batch.
-// Services eligible in the same reconcile are applied in the order they are
-// listed, so name order would upgrade a dependent first whenever it happens to
-// sort earlier.
+// sortByDependency puts a dependency ahead of its dependents. Services are
+// applied in the order the ServiceSet spec lists them, so name order would
+// upgrade a dependent first whenever it happens to sort earlier.
 //
 // Depth-first post-order over the input: a service is placed once everything it
 // depends on has been. That refines the input order rather than replacing it, so
@@ -698,10 +687,9 @@ func ServicesToDeploy(
 	// the deployed one means the service is in flight, and it is carried over as
 	// stored with mutable fields merged from the desired spec.
 	//
-	// Recorded here, appended below: the whole batch is emitted in one pass over
-	// filteredServices so the dependency order established there is what reaches
-	// the provider. Appending in flight services here would put them all ahead of
-	// it, including ahead of dependencies they need.
+	// Recorded here, appended below, so the whole batch is emitted in one pass
+	// over filteredServices. The order is not what reaches the provider:
+	// BuildServicesList orders the final spec by dependency.
 	inFlightServices := make(map[client.ObjectKey]kcmv1.ServiceWithValues)
 	var services []kcmv1.ServiceWithValues
 
@@ -793,6 +781,12 @@ func ServicesToDeploy(
 //     not included in filtered (locked — dependencies not yet satisfied).
 //  3. Dropping services from stored that are no longer present in desired
 //     (explicitly removed by the user).
+//
+// The result is ordered by the dependency graph of desired, not by where each
+// service came from: locked services would otherwise trail the eligible ones in
+// whatever order the stored spec had them, which can put one ahead of a locked
+// service it depends on. Ranking against desired also keeps a service in place
+// as it moves between locked and eligible, so the spec is not rewritten for it.
 func BuildServicesList(
 	stored []kcmv1.ServiceWithValues,
 	filtered []kcmv1.ServiceWithValues,
@@ -821,6 +815,31 @@ func BuildServicesList(
 		}
 		result = append(result, svc) // locked — preserve at current version
 	}
+
+	// Every service in result is in desired: filtered is drawn from it and stored
+	// services that are not were dropped above, so each one has a rank.
+	//
+	// desired is sorted by key first because sortByDependency only refines the
+	// order it is given: ranking against the owner's listing would rewrite the
+	// spec whenever the services were merely listed differently. Sorted on a copy
+	// so the owner's CR is left untouched.
+	byKey := slices.Clone(desired)
+	slices.SortFunc(byKey, func(a, b kcmv1.Service) int {
+		aKey := ServiceKey(a.Namespace, a.Name)
+		bKey := ServiceKey(b.Namespace, b.Name)
+
+		if n := cmp.Compare(aKey.Namespace, bKey.Namespace); n != 0 {
+			return n
+		}
+		return cmp.Compare(aKey.Name, bKey.Name)
+	})
+	rank := make(map[client.ObjectKey]int, len(desired))
+	for i, svc := range sortByDependency(byKey) {
+		rank[ServiceKey(svc.Namespace, svc.Name)] = i
+	}
+	slices.SortStableFunc(result, func(a, b kcmv1.ServiceWithValues) int {
+		return cmp.Compare(rank[ServiceKey(a.Namespace, a.Name)], rank[ServiceKey(b.Namespace, b.Name)])
+	})
 
 	return result
 }

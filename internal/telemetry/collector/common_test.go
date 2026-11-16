@@ -128,3 +128,24 @@ func Test_listAsPartial(t *testing.T) {
 	names := []string{items[0].Name, items[1].Name, items[2].Name}
 	reqs.Equal([]string{"a", "b", "c"}, names)
 }
+
+func Test_listAsPartial_paginates(t *testing.T) {
+	objs := []client.Object{
+		&corev1.Node{Name: "a"},
+		&corev1.Node{Name: "b"},
+		&corev1.Node{Name: "c"},
+	}
+
+	reqs := require.New(t)
+	scheme := runtime.NewScheme()
+	reqs.NoError(metav1.AddMetaToScheme(scheme))
+	reqs.NoError(corev1.AddToScheme(scheme))
+	fakeCl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+
+	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Node"}
+	items, err := listAsPartialWithLimit(t.Context(), fakeCl, gvk, 1)
+	reqs.NoError(err)
+	reqs.Len(items, 3, "expected all items collected across multiple single-item pages")
+	names := []string{items[0].Name, items[1].Name, items[2].Name}
+	reqs.Equal([]string{"a", "b", "c"}, names)
+}

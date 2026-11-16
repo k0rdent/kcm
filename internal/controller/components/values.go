@@ -48,6 +48,16 @@ func getComponentValues(
 		}
 	}
 
+	var globalValues chartutil.Values
+	if opts.GlobalValues != nil && opts.GlobalValues.Raw != nil {
+		values := make(map[string]any)
+		if err := json.Unmarshal(opts.GlobalValues.Raw, &values); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal the global values: %w", err)
+		}
+
+		globalValues = chartutil.Values{"global": values}
+	}
+
 	env := loadEnvConfig()
 
 	componentValues := chartutil.Values{}
@@ -98,9 +108,9 @@ func getComponentValues(
 	var merged chartutil.Values
 	// for projectsveltos, we want new values to override values provided in Management spec
 	if name == kcmv1.ProviderSveltosName {
-		merged = chartutil.CoalesceTables(componentValues, currentValues)
+		merged = chartutil.CoalesceTables(componentValues, chartutil.CoalesceTables(currentValues, globalValues))
 	} else {
-		merged = chartutil.CoalesceTables(currentValues, componentValues)
+		merged = chartutil.CoalesceTables(currentValues, chartutil.CoalesceTables(componentValues, globalValues))
 	}
 
 	raw, err := json.Marshal(merged)
@@ -212,7 +222,8 @@ func getGlobalValues(
 	opts ReconcileComponentsOpts,
 	env envConfig,
 ) chartutil.Values {
-	if !env.proxySet && len(opts.GlobalRegistry) == 0 && opts.ImagePullSecretName == nil && !env.providersReloadSet && !opts.EnableInPlaceUpdates {
+	if !env.proxySet && len(opts.GlobalRegistry) == 0 && opts.ImagePullSecretName == nil && !env.providersReloadSet &&
+		!opts.EnableInPlaceUpdates && !opts.EnableInPlaceVersionWithDeleteFirst {
 		return nil
 	}
 
@@ -243,6 +254,10 @@ func getGlobalValues(
 
 	if opts.EnableInPlaceUpdates && name != kcmv1.ProviderSveltosName {
 		global["enableInPlaceUpdates"] = true
+	}
+
+	if opts.EnableInPlaceVersionWithDeleteFirst && name != kcmv1.ProviderSveltosName {
+		global["enableInPlaceVersionWithDeleteFirst"] = true
 	}
 
 	if len(global) > 0 {

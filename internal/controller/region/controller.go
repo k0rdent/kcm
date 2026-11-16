@@ -64,8 +64,9 @@ type Reconciler struct {
 
 	defaultRequeueTime time.Duration
 
-	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
-	EnableInPlaceUpdates   bool // passed to the components
+	IsDisabledValidationWH              bool // is webhook disabled set via the controller flags
+	EnableInPlaceUpdates                bool // passed to the components
+	EnableInPlaceVersionWithDeleteFirst bool // passed to the components
 
 	skipCertManagerInstalledCheck bool
 }
@@ -180,12 +181,13 @@ func (r *Reconciler) update(ctx context.Context, rgnlClient client.Client, restC
 	}
 
 	opts := components.ReconcileComponentsOpts{
-		DefaultHelmTimeout:     r.DefaultHelmTimeout,
-		Namespace:              r.SystemNamespace,
-		GlobalRegistry:         r.GlobalRegistry,
-		RegistryCertSecretName: r.RegistryCertSecretName,
-		ImagePullSecretName:    r.ImagePullSecretName,
-		EnableInPlaceUpdates:   r.EnableInPlaceUpdates,
+		DefaultHelmTimeout:                  r.DefaultHelmTimeout,
+		Namespace:                           r.SystemNamespace,
+		GlobalRegistry:                      r.GlobalRegistry,
+		RegistryCertSecretName:              r.RegistryCertSecretName,
+		ImagePullSecretName:                 r.ImagePullSecretName,
+		EnableInPlaceUpdates:                r.EnableInPlaceUpdates,
+		EnableInPlaceVersionWithDeleteFirst: r.EnableInPlaceVersionWithDeleteFirst,
 
 		KubeConfigRef: overridenKubeconfigRef,
 

@@ -82,9 +82,10 @@ type ManagementReconciler struct {
 	CAPIClusterPollInterval time.Duration // forwarded to the [ClusterDeploymentReconciler]
 	defaultRequeueTime      time.Duration
 
-	CreateAccessManagement bool
-	IsDisabledValidationWH bool // is webhook disabled set via the controller flags
-	EnableInPlaceUpdates   bool // passed to the components
+	CreateAccessManagement              bool
+	IsDisabledValidationWH              bool // is webhook disabled set via the controller flags
+	EnableInPlaceUpdates                bool // passed to the components
+	EnableInPlaceVersionWithDeleteFirst bool // passed to the components
 
 	sveltosDependentControllersStarted bool
 }
@@ -193,12 +194,13 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 	}
 
 	opts := components.ReconcileComponentsOpts{
-		DefaultHelmTimeout:     r.DefaultHelmTimeout,
-		Namespace:              r.SystemNamespace,
-		GlobalRegistry:         r.GlobalRegistry,
-		RegistryCertSecretName: r.RegistryCertSecretName,
-		ImagePullSecretName:    r.ImagePullSecretName,
-		EnableInPlaceUpdates:   r.EnableInPlaceUpdates,
+		DefaultHelmTimeout:                  r.DefaultHelmTimeout,
+		Namespace:                           r.SystemNamespace,
+		GlobalRegistry:                      r.GlobalRegistry,
+		RegistryCertSecretName:              r.RegistryCertSecretName,
+		ImagePullSecretName:                 r.ImagePullSecretName,
+		EnableInPlaceUpdates:                r.EnableInPlaceUpdates,
+		EnableInPlaceVersionWithDeleteFirst: r.EnableInPlaceVersionWithDeleteFirst,
 	}
 
 	requeue, errs := components.Reconcile(ctx, r.Client, r.Client, management, r.Config, release, opts)

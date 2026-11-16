@@ -35,3 +35,6 @@ inPlaceUpdates: # @schema type: object; description: Cluster API in-place update
     nodeSelector: {} # @schema type: object; description: Node selector of the extension webhook server pods
     tolerations: [] # @schema type: array; item: object; description: Tolerations of the extension webhook server pods
     affinity: {} # @schema type: object; description: Affinity of the extension webhook server pods
+
+inPlaceVersionWithDeleteFirst: # @schema type: object; description: Combined in-place version and delete-first update settings (experimental); additionalProperties: false
+  enabled: null # @schema type: [boolean, null]; description: Enable the InPlaceVersionWithDeleteFirst feature gate of the controlplane provider, so k0s version-only changes are applied in place and other machine replacements follow the RecreateDeleteFirst strategy, whichever of the InPlace or RecreateDeleteFirst strategies a K0sControlPlane uses. Defaults to global.enableInPlaceVersionWithDeleteFirst if unset. Explicitly set controlPlane.manager.featureGates take precedence

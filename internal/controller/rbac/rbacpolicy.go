@@ -23,6 +23,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"slices"
 
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -68,10 +70,38 @@ func Retriable(err error) bool {
 	return !errors.Is(err, ErrTerminal)
 }
 
+// Unreachable reports whether err is a transport failure with no API server response.
+func Unreachable(err error) bool {
+	if err == nil {
+		return false
+	}
+	var status apierrors.APIStatus
+	if errors.As(err, &status) || errors.Is(err, ErrTerminal) {
+		return false
+	}
+	var (
+		urlErr *url.Error
+		netErr net.Error
+	)
+	return errors.As(err, &urlErr) || errors.As(err, &netErr) ||
+		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
+}
+
+// stoppedError marks a [Sync] that stopped at an [Unreachable] request.
+type stoppedError struct{ error }
+
+func (e stoppedError) Unwrap() error { return e.error }
+
+// Stopped reports whether err is from a [Sync] that stopped at an [Unreachable] request.
+func Stopped(err error) bool {
+	var s stoppedError
+	return errors.As(err, &s)
+}
+
 // Sync creates/updates the ClusterRoles and ClusterRoleBindings implied by policy's role catalog,
 // and returns the set of object names that are now desired (for use by [Prune]) and whether
-// anything was actually created or updated. A binding that fails to apply does not stop the rest
-// from being applied; all failures are joined into the returned error.
+// anything was actually created or updated. A refused binding does not stop the rest; an
+// [Unreachable] one does. All failures are joined into the returned error.
 func Sync(ctx context.Context, childCl client.Client, policy *kcmv1.RBACPolicy) (desiredRoles, desiredBindings map[string]struct{}, changed bool, _ error) {
 	desiredRoles = make(map[string]struct{})
 	desiredBindings = make(map[string]struct{})
@@ -95,6 +125,9 @@ func Sync(ctx context.Context, childCl client.Client, policy *kcmv1.RBACPolicy) 
 			roleChanged, err := applyClusterRole(ctx, childCl, binding.ClusterRole, binding.Rules)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("applying ClusterRole %s: %w", binding.ClusterRole, err))
+				if Unreachable(err) {
+					return desiredRoles, desiredBindings, changed, stoppedError{errors.Join(errs...)}
+				}
 				continue
 			}
 			changed = changed || roleChanged
@@ -102,11 +135,13 @@ func Sync(ctx context.Context, childCl client.Client, policy *kcmv1.RBACPolicy) 
 
 		bindingName := kcmv1.ClusterRoleBindingNamePrefix + binding.Name
 		bindingChanged, err := applyClusterRoleBinding(ctx, childCl, bindingName, binding.ClusterRole, toSubjects(binding.Subjects))
+		changed = changed || bindingChanged
 		if err != nil {
 			errs = append(errs, fmt.Errorf("applying ClusterRoleBinding %s: %w", bindingName, err))
-			continue
+			if Unreachable(err) {
+				return desiredRoles, desiredBindings, changed, stoppedError{errors.Join(errs...)}
+			}
 		}
-		changed = changed || bindingChanged
 	}
 
 	return desiredRoles, desiredBindings, changed, errors.Join(errs...)
@@ -178,7 +213,8 @@ func applyClusterRoleBinding(ctx context.Context, childCl client.Client, name, c
 			return false, fmt.Errorf("deleting outdated ClusterRoleBinding to change roleRef: %w", err)
 		}
 		if err := childCl.Create(ctx, desired(nil)); err != nil {
-			return false, fmt.Errorf("creating ClusterRoleBinding after deleting the outdated one: %w", err)
+			// The outdated binding is already gone, so the child cluster did change.
+			return true, fmt.Errorf("creating ClusterRoleBinding after deleting the outdated one: %w", err)
 		}
 		return true, nil
 	}

@@ -79,6 +79,11 @@ rules:
   - machinedeployments
   verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
 - apiGroups:
+  - controlplane.cluster.x-k8s.io
+  resources:
+  - k0smotroncontrolplanes
+  verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
+- apiGroups:
   - helm.toolkit.fluxcd.io
   resources:
   - helmreleases

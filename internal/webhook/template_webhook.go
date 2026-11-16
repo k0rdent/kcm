@@ -45,6 +45,17 @@ type ClusterTemplateValidator struct {
 	TemplateValidator
 }
 
+// newClusterTemplateValidator returns a ClusterTemplateValidator for checks made outside of the
+// ClusterTemplate webhook itself, such as an AccessManagement update removing ClusterTemplates.
+func newClusterTemplateValidator(cl client.Client, systemNamespace string) *ClusterTemplateValidator {
+	return &ClusterTemplateValidator{TemplateValidator{
+		Client:            cl,
+		SystemNamespace:   systemNamespace,
+		templateKind:      kcmv1.ClusterTemplateKind,
+		templateChainKind: kcmv1.ClusterTemplateChainKind,
+	}}
+}
+
 func (v *ClusterTemplateValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	v.Client = mgr.GetClient()
 	v.templateKind = kcmv1.ClusterTemplateKind

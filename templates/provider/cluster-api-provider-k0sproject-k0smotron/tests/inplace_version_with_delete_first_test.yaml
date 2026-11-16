@@ -1,0 +1,106 @@
+suite: K0smotron provider in-place version with delete-first
+templates:
+  - templates/providers.yaml
+  - templates/extension-webhook.yaml
+
+tests:
+  - it: "keeps managers untouched when disabled"
+    template: templates/providers.yaml
+    asserts:
+      - equal:
+          path: spec.manager
+          value: {}
+
+  - it: "enables InPlaceVersionWithDeleteFirst feature gate on the controlplane provider only"
+    set:
+      inPlaceVersionWithDeleteFirst.enabled: true
+    template: templates/providers.yaml
+    asserts:
+      - equal:
+          path: spec.manager.featureGates
+          value:
+            InPlaceVersionWithDeleteFirst: true
+        documentSelector:
+          path: kind
+          value: ControlPlaneProvider
+      - equal:
+          path: spec.manager
+          value: {}
+        documentSelector:
+          path: kind
+          value: BootstrapProvider
+      - equal:
+          path: spec.manager
+          value: {}
+        documentSelector:
+          path: kind
+          value: InfrastructureProvider
+
+  - it: "renders no extension webhook without in-place updates"
+    set:
+      inPlaceVersionWithDeleteFirst.enabled: true
+    template: templates/extension-webhook.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: "combines with the InPlaceUpdates feature gate"
+    set:
+      inPlaceUpdates.enabled: true
+      inPlaceVersionWithDeleteFirst.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 8
+        template: templates/extension-webhook.yaml
+      - equal:
+          path: spec.manager.featureGates
+          value:
+            InPlaceUpdates: true
+            InPlaceVersionWithDeleteFirst: true
+        template: templates/providers.yaml
+        documentSelector:
+          path: kind
+          value: ControlPlaneProvider
+
+  - it: "keeps user-provided controlplane feature gates and their values"
+    set:
+      inPlaceVersionWithDeleteFirst.enabled: true
+      controlPlane.manager.featureGates:
+        CloudInitVars: true
+        InPlaceVersionWithDeleteFirst: false
+    template: templates/providers.yaml
+    documentSelector:
+      path: kind
+      value: ControlPlaneProvider
+    asserts:
+      - equal:
+          path: spec.manager.featureGates
+          value:
+            CloudInitVars: true
+            InPlaceVersionWithDeleteFirst: false
+
+  - it: "follows global.enableInPlaceVersionWithDeleteFirst when unset"
+    set:
+      global.enableInPlaceVersionWithDeleteFirst: true
+    template: templates/providers.yaml
+    documentSelector:
+      path: kind
+      value: ControlPlaneProvider
+    asserts:
+      - equal:
+          path: spec.manager.featureGates
+          value:
+            InPlaceVersionWithDeleteFirst: true
+
+  - it: "prefers explicitly disabled value over the global one"
+    set:
+      global.enableInPlaceVersionWithDeleteFirst: true
+      inPlaceVersionWithDeleteFirst.enabled: false
+    template: templates/providers.yaml
+    documentSelector:
+      path: kind
+      value: ControlPlaneProvider
+    asserts:
+      - equal:
+          path: spec.manager
+          value: {}

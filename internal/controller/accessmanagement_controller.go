@@ -52,6 +52,7 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/record"
+	accessmanagementutil "github.com/K0rdent/kcm/internal/util/accessmanagement"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	labelsutil "github.com/K0rdent/kcm/internal/util/labels"
 	pollerutil "github.com/K0rdent/kcm/internal/util/poller"
@@ -171,7 +172,7 @@ func (r *AccessManagementReconciler) Reconcile(ctx context.Context, req ctrl.Req
 }
 
 func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgmt *kcmv1.AccessManagement) error {
-	currentGKs := r.collectReferencedGroupKinds(accessMgmt)
+	currentGKs := accessmanagementutil.ReferencedGroupKinds(accessMgmt)
 	currentGKSet := make(map[schema.GroupKind]struct{}, len(currentGKs))
 	for _, gk := range currentGKs {
 		currentGKSet[gk] = struct{}{}
@@ -199,21 +200,10 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 		return err
 	}
 
-	// Precomputed once per rule, independent of any Kind: reused for every Kind that rule
-	// references in the per-Kind loop below.
-	ruleNamespaces := make([][]string, len(accessMgmt.Spec.AccessRules))
-	ruleResources := make([][]kcmv1.ResourceRule, len(accessMgmt.Spec.AccessRules))
-	for i, rule := range accessMgmt.Spec.AccessRules {
-		namespaces, err := r.getTargetNamespaces(ctx, rule.TargetNamespaces)
-		if err != nil {
-			return fmt.Errorf("failed to collect target namespaces: %w", err)
-		}
-		ruleNamespaces[i] = namespaces
-		// EffectiveResources falls back to the deprecated one-field-per-Kind selectors when
-		// Resources is empty, for backward compatibility when the mutating webhook that
-		// normally migrates them on write is disabled/unavailable. When both are present,
-		// Resources wins outright.
-		ruleResources[i] = rule.EffectiveResources()
+	// Resolved once, independent of any Kind: reused for every Kind in the per-Kind loop below.
+	rules, err := accessmanagementutil.ResolveRules(ctx, r.Client, r.SystemNamespace, accessMgmt.Spec.AccessRules)
+	if err != nil {
+		return err
 	}
 
 	statuses := make(map[schema.GroupKind]*kcmv1.ResourceKindStatus, len(currentGKs)+len(staleGKs))
@@ -227,8 +217,6 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 	for _, gk := range append(slices.Clone(currentGKs), staleGKs...) {
 		status := &kcmv1.ResourceKindStatus{APIGroup: gk.Group, Kind: gk.Kind}
 		statuses[gk] = status
-		_, isCurrent := currentGKSet[gk]
-		keep := make(map[string]bool)
 
 		res, err := r.collectGroupKindResources(ctx, accessMgmt, gk, ownerRef)
 		switch {
@@ -244,26 +232,23 @@ func (r *AccessManagementReconciler) reconcileObj(ctx context.Context, accessMgm
 			continue
 		}
 
-		if isCurrent {
-			for i, resRules := range ruleResources {
-				for _, resRule := range resRules {
-					if resRule.GroupKind() != gk {
-						continue
-					}
-
-					for _, targetNamespace := range ruleNamespaces[i] {
-						if err := r.processResourceRule(ctx, accessMgmt, resRule, gk, targetNamespace, res, keep); err != nil {
-							errs = errors.Join(errs, err)
-							r.recordFirstError(status, err)
-						}
-					}
-				}
-			}
+		// Admission checks an update against this very plan, see
+		// accessmanagementutil.ClusterTemplatesToRemove. A stale gk, which no rule references anymore, plans no copy,
+		// so every managed copy of it is removed. A plan that cannot be made leaves the copies
+		// alone: removing them on a partial view of the rules would be worse than retrying.
+		plan, err := accessmanagementutil.PlanGroupKind(rules, gk, res.system, res.managed, accessMgmt)
+		if err != nil {
+			status.Error = err.Error()
+			errs = errors.Join(errs, err)
+			continue
 		}
-		// else: gk is stale, no rule references it anymore, so keep stays empty and every
-		// managed copy found below is deleted.
 
-		if err := r.cleanupManagedResources(ctx, accessMgmt, gk, res.managed, keep); err != nil {
+		if err := r.distribute(ctx, accessMgmt, gk, plan.Desired, res); err != nil {
+			errs = errors.Join(errs, err)
+			r.recordFirstError(status, err)
+		}
+
+		if err := r.cleanupManagedResources(ctx, accessMgmt, gk, plan.Remove, plan.Release); err != nil {
 			errs = errors.Join(errs, err)
 			r.recordFirstError(status, err)
 		}
@@ -337,27 +322,6 @@ func (*AccessManagementReconciler) sortedResourceStatuses(statuses map[schema.Gr
 	return result
 }
 
-// collectReferencedGroupKinds returns the de-duplicated set of GroupKinds referenced across all
-// of accessMgmt's AccessRules' EffectiveResources, in first-seen order.
-func (*AccessManagementReconciler) collectReferencedGroupKinds(accessMgmt *kcmv1.AccessManagement) []schema.GroupKind {
-	seen := make(map[schema.GroupKind]struct{})
-	var gks []schema.GroupKind
-
-	for _, rule := range accessMgmt.Spec.AccessRules {
-		for _, res := range rule.EffectiveResources() {
-			gk := res.GroupKind()
-
-			if _, ok := seen[gk]; ok {
-				continue
-			}
-			seen[gk] = struct{}{}
-			gks = append(gks, gk)
-		}
-	}
-
-	return gks
-}
-
 // collectGroupKindResources resolves gk to a GroupVersionResource (letting the RESTMapper pick
 // the preferred/served version, since AccessManagement only ever manipulates objects generically
 // via unstructured.Unstructured) and lists both the system objects (the only allowed source for
@@ -406,80 +370,36 @@ func (r *AccessManagementReconciler) collectGroupKindResources(ctx context.Conte
 			continue
 		}
 		managed = append(managed, &managedList.Items[i])
-		managedByNamespacedName[r.getNamespacedName(managedList.Items[i].GetNamespace(), managedList.Items[i].GetName())] = &managedList.Items[i]
+		managedByNamespacedName[accessmanagementutil.NamespacedName(managedList.Items[i].GetNamespace(), managedList.Items[i].GetName())] = &managedList.Items[i]
 	}
 
 	return &groupKindResources{system: system, managed: managed, managedByNamespacedName: managedByNamespacedName, ownerRef: ownerRef}, nil
 }
 
-func (r *AccessManagementReconciler) processResourceRule(
-	ctx context.Context,
-	accessMgmt *kcmv1.AccessManagement,
-	rule kcmv1.ResourceRule,
-	gk schema.GroupKind,
-	targetNamespace string,
-	res *groupKindResources,
-	keep map[string]bool,
-) error {
-	names, err := r.resolveResourceRuleNames(rule, res.system)
-	if err != nil {
-		return fmt.Errorf("failed to resolve names for %s: %w", gk, err)
-	}
-
+// distribute makes sure every copy in desired exists, reporting the ones whose source is missing
+// from the system namespace.
+func (r *AccessManagementReconciler) distribute(ctx context.Context, accessMgmt *kcmv1.AccessManagement, gk schema.GroupKind, desired []accessmanagementutil.Target, res *groupKindResources) error {
 	var errs error
-	for _, name := range names {
-		namespacedName := r.getNamespacedName(targetNamespace, name)
-		keep[namespacedName] = true
-
-		sourceObj, ok := res.system[name]
+	for _, target := range desired {
+		sourceObj, ok := res.system[target.Name]
 		if !ok {
-			errs = errors.Join(errs, fmt.Errorf("%s %s/%s is not found", gk.Kind, r.SystemNamespace, name))
+			errs = errors.Join(errs, fmt.Errorf("%s %s/%s is not found", gk.Kind, r.SystemNamespace, target.Name))
 			continue
 		}
 
-		created, err := r.createManagedObject(ctx, accessMgmt, gk, sourceObj, targetNamespace, res)
+		created, err := r.createManagedObject(ctx, accessMgmt, gk, sourceObj, target.Namespace, res)
 		if err != nil {
-			r.warnf(accessMgmt, gk.Kind+"CreationFailed", "Failed to create %s %s/%s: %v", gk.Kind, targetNamespace, name, err)
+			r.warnf(accessMgmt, gk.Kind+"CreationFailed", "Failed to create %s %s/%s: %v", gk.Kind, target.Namespace, target.Name, err)
 			errs = errors.Join(errs, err)
 			continue
 		}
 
 		if created {
-			r.eventf(accessMgmt, gk.Kind+"Created", "Successfully created %s %s/%s", gk.Kind, targetNamespace, name)
+			r.eventf(accessMgmt, gk.Kind+"Created", "Successfully created %s %s/%s", gk.Kind, target.Namespace, target.Name)
 		}
 	}
 
 	return errs
-}
-
-// resolveResourceRuleNames returns the object names in the system namespace selected by rule.
-// Whether Names was set at all (rather than just non-empty) is what decides the branch taken:
-// an explicitly-empty Names ([] rather than omitted) means "select nothing" and must not fall
-// through to selector matching, or it would silently select every object of the Kind. A
-// non-empty Names is used verbatim (even for names not found in system, so callers can still
-// report a clear "not found" error and keep the target from being deleted-then-recreated on the
-// next reconcile). Only when Names is nil is Selector/StringSelector matched against the system
-// objects' labels — same convention as TargetNamespaces (buildLabelSelector's other call site):
-// no selector, or an empty one, matches every object of the Kind.
-func (r *AccessManagementReconciler) resolveResourceRuleNames(rule kcmv1.ResourceRule, system map[string]*unstructured.Unstructured) ([]string, error) {
-	if rule.Names != nil {
-		return rule.Names, nil
-	}
-
-	selector, selectorNonEmpty, err := r.buildLabelSelector(rule.Selector, rule.StringSelector)
-	if err != nil {
-		return nil, fmt.Errorf("failed to construct selector: %w", err)
-	}
-
-	names := make([]string, 0, len(system))
-	for name, obj := range system {
-		if !selectorNonEmpty || selector.Matches(labels.Set(obj.GetLabels())) {
-			names = append(names, name)
-		}
-	}
-	slices.Sort(names)
-
-	return names, nil
 }
 
 // createManagedObject creates targetNamespace's managed copy of sourceObj, applying the built-in
@@ -497,7 +417,7 @@ func (r *AccessManagementReconciler) createManagedObject(ctx context.Context, ac
 	// there is nothing left to do for one already owned, or for a name another rule found
 	// blocked earlier in this pass. The cost is immediacy — a copy deleted since the listing is
 	// recreated on the next reconciliation rather than on this one.
-	namespacedName := r.getNamespacedName(targetNamespace, sourceObj.GetName())
+	namespacedName := accessmanagementutil.NamespacedName(targetNamespace, sourceObj.GetName())
 	if existing, ok := res.managedByNamespacedName[namespacedName]; ok && r.settled(existing, res.ownerRef) {
 		return false, nil
 	}
@@ -777,29 +697,27 @@ func (*AccessManagementReconciler) rewriteNamespaceIfEmpty(obj *unstructured.Uns
 	return nil
 }
 
-func (r *AccessManagementReconciler) cleanupManagedResources(ctx context.Context, accessMgmt *kcmv1.AccessManagement, gk schema.GroupKind, managedObjects []*metav1.PartialObjectMetadata, keep map[string]bool) error {
+// cleanupManagedResources deletes the managed copies in remove and lets go of those in release,
+// see accessmanagementutil.Plan.
+func (r *AccessManagementReconciler) cleanupManagedResources(ctx context.Context, accessMgmt *kcmv1.AccessManagement, gk schema.GroupKind, remove, release []*metav1.PartialObjectMetadata) error {
 	var errs error
-	for _, obj := range managedObjects {
-		namespacedName := r.getNamespacedName(obj.GetNamespace(), obj.GetName())
-		if keep[namespacedName] {
+	for _, obj := range release {
+		namespacedName := accessmanagementutil.NamespacedName(obj.GetNamespace(), obj.GetName())
+
+		released, err := r.releaseManagedObject(ctx, gk, obj, accessMgmt)
+		if err != nil {
+			r.warnf(accessMgmt, gk.Kind+"ReleaseFailed", "Failed to release %s %s: %v", gk.Kind, namespacedName, err)
+			errs = errors.Join(errs, err)
 			continue
 		}
 
-		// a copy something else owns too (e.g. a ClusterTemplate a ClusterTemplateChain also
-		// distributed into the same namespace) is still wanted there: only let go of it
-		if hasForeignOwnerReference(obj.GetOwnerReferences(), accessMgmt) {
-			released, err := r.releaseManagedObject(ctx, gk, obj, accessMgmt)
-			if err != nil {
-				r.warnf(accessMgmt, gk.Kind+"ReleaseFailed", "Failed to release %s %s: %v", gk.Kind, namespacedName, err)
-				errs = errors.Join(errs, err)
-				continue
-			}
-
-			if released {
-				r.eventf(accessMgmt, gk.Kind+"Released", "Successfully released %s %s", gk.Kind, namespacedName)
-			}
-			continue
+		if released {
+			r.eventf(accessMgmt, gk.Kind+"Released", "Successfully released %s %s", gk.Kind, namespacedName)
 		}
+	}
+
+	for _, obj := range remove {
+		namespacedName := accessmanagementutil.NamespacedName(obj.GetNamespace(), obj.GetName())
 
 		deleted, err := r.deleteManagedObject(ctx, gk, obj)
 		if err != nil {
@@ -832,25 +750,12 @@ func (r *AccessManagementReconciler) deleteManagedObject(ctx context.Context, gk
 	return true, nil
 }
 
-// isAccessManagementOwnerReference reports whether ref names an AccessManagement, whatever its
-// version or UID: a reference left by a since-recreated AccessManagement is still this
-// controller's to drop.
-func isAccessManagementOwnerReference(ref metav1.OwnerReference, accessMgmt *kcmv1.AccessManagement) bool {
-	gv, err := schema.ParseGroupVersion(ref.APIVersion)
-	return err == nil && gv.Group == kcmv1.GroupVersion.Group && ref.Kind == kcmv1.AccessManagementKind && ref.Name == accessMgmt.Name
-}
-
-// hasForeignOwnerReference reports whether refs carry any owner besides accessMgmt.
-func hasForeignOwnerReference(refs []metav1.OwnerReference, accessMgmt *kcmv1.AccessManagement) bool {
-	return slices.ContainsFunc(refs, func(ref metav1.OwnerReference) bool {
-		return !isAccessManagementOwnerReference(ref, accessMgmt)
-	})
-}
-
 // releaseManagedObject drops accessMgmt's owner references from a managed copy that something
 // else owns as well, leaving the copy itself in place for its other owners.
 func (r *AccessManagementReconciler) releaseManagedObject(ctx context.Context, gk schema.GroupKind, obj *metav1.PartialObjectMetadata, accessMgmt *kcmv1.AccessManagement) (released bool, _ error) {
-	isOwnRef := func(ref metav1.OwnerReference) bool { return isAccessManagementOwnerReference(ref, accessMgmt) }
+	isOwnRef := func(ref metav1.OwnerReference) bool {
+		return accessmanagementutil.IsAccessManagementOwnerReference(ref, accessMgmt)
+	}
 	if !slices.ContainsFunc(obj.GetOwnerReferences(), isOwnRef) {
 		return false, nil
 	}
@@ -904,61 +809,6 @@ func (r *AccessManagementReconciler) releaseManagedObject(ctx context.Context, g
 	}
 
 	return released, nil
-}
-
-func (*AccessManagementReconciler) getNamespacedName(namespace, name string) string {
-	return namespace + "/" + name
-}
-
-// getTargetNamespaces resolves the namespaces a rule distributes into, always excluding
-// SystemNamespace: an object copied back into the namespace it was read from is either a no-op
-// or the corruption described on createManagedObject.
-func (r *AccessManagementReconciler) getTargetNamespaces(ctx context.Context, targetNamespaces kcmv1.TargetNamespaces) ([]string, error) {
-	if len(targetNamespaces.List) > 0 {
-		// no match is the common case and keeps the spec's slice as is; from the first match on,
-		// the prefix is bulk-copied and only the remainder is filtered
-		i := slices.Index(targetNamespaces.List, r.SystemNamespace)
-		if i < 0 {
-			return targetNamespaces.List, nil
-		}
-
-		result := make([]string, i, len(targetNamespaces.List)-1)
-		copy(result, targetNamespaces.List[:i])
-		for _, ns := range targetNamespaces.List[i+1:] {
-			if ns != r.SystemNamespace {
-				result = append(result, ns)
-			}
-		}
-
-		return result, nil
-	}
-
-	selector, selectorNonEmpty, err := r.buildLabelSelector(targetNamespaces.Selector, targetNamespaces.StringSelector)
-	if err != nil {
-		return nil, fmt.Errorf("failed to construct selector from target namespaces: %w", err)
-	}
-
-	var (
-		namespaces = new(corev1.NamespaceList)
-		listOpts   = new(client.ListOptions)
-	)
-	if selectorNonEmpty {
-		listOpts.LabelSelector = selector
-	}
-
-	if err := r.List(ctx, namespaces, listOpts); err != nil {
-		return nil, fmt.Errorf("failed to list namespaces: %w", err)
-	}
-
-	result := make([]string, 0, len(namespaces.Items))
-	for _, ns := range namespaces.Items {
-		if ns.Name == r.SystemNamespace {
-			continue
-		}
-		result = append(result, ns.Name)
-	}
-
-	return result, nil
 }
 
 func (r *AccessManagementReconciler) updateStatus(ctx context.Context, accessMgmt *kcmv1.AccessManagement) error {
@@ -1144,38 +994,12 @@ func (r *AccessManagementReconciler) collectAccessManagementRequests(ctx context
 	return requests
 }
 
-// buildLabelSelector is the single helper behind both TargetNamespaces and ResourceRule
-// selector matching: a non-empty stringSelector takes precedence, then a structured selector.
-// The returned bool reports whether the resulting selector is non-empty (an empty selector, or
-// no selector at all, conventionally means "match everything" for both use sites).
-func (*AccessManagementReconciler) buildLabelSelector(selector *metav1.LabelSelector, stringSelector string) (labels.Selector, bool, error) {
-	if stringSelector != "" {
-		sel, err := labels.Parse(stringSelector)
-		if err != nil {
-			return nil, false, fmt.Errorf("failed to parse string selector %q: %w", stringSelector, err)
-		}
-
-		return sel, !sel.Empty(), nil
-	}
-
-	if selector == nil {
-		return nil, false, nil
-	}
-
-	sel, err := metav1.LabelSelectorAsSelector(selector)
-	if err != nil {
-		return nil, false, fmt.Errorf("failed to convert selector: %w", err)
-	}
-
-	return sel, !sel.Empty(), nil
-}
-
-func (r *AccessManagementReconciler) ruleTargetsNamespace(rule kcmv1.AccessRule, namespace *corev1.Namespace) (bool, error) {
+func (*AccessManagementReconciler) ruleTargetsNamespace(rule kcmv1.AccessRule, namespace *corev1.Namespace) (bool, error) {
 	if len(rule.TargetNamespaces.List) > 0 {
 		return slices.Contains(rule.TargetNamespaces.List, namespace.Name), nil
 	}
 
-	selector, selectorNonEmpty, err := r.buildLabelSelector(rule.TargetNamespaces.Selector, rule.TargetNamespaces.StringSelector)
+	selector, selectorNonEmpty, err := accessmanagementutil.LabelSelector(rule.TargetNamespaces.Selector, rule.TargetNamespaces.StringSelector)
 	if err != nil {
 		return false, fmt.Errorf("failed to get target namespaces selector: %w", err)
 	}
@@ -1203,12 +1027,12 @@ func (r *AccessManagementReconciler) accessManagementTargetsNamespace(accessMgmt
 	return false, nil
 }
 
-func (r *AccessManagementReconciler) ruleAffectedByNamespaceLabelUpdate(rule kcmv1.AccessRule, oldNamespace, newNamespace *corev1.Namespace) (bool, error) {
+func (*AccessManagementReconciler) ruleAffectedByNamespaceLabelUpdate(rule kcmv1.AccessRule, oldNamespace, newNamespace *corev1.Namespace) (bool, error) {
 	if len(rule.TargetNamespaces.List) > 0 {
 		return false, nil
 	}
 
-	selector, selectorNonEmpty, err := r.buildLabelSelector(rule.TargetNamespaces.Selector, rule.TargetNamespaces.StringSelector)
+	selector, selectorNonEmpty, err := accessmanagementutil.LabelSelector(rule.TargetNamespaces.Selector, rule.TargetNamespaces.StringSelector)
 	if err != nil {
 		return false, fmt.Errorf("failed to get target namespaces selector: %w", err)
 	}
