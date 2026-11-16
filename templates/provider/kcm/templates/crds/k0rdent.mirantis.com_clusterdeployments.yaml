@@ -1072,12 +1072,52 @@ spec:
                   format: int64
                   minimum: 1
                   type: integer
+                rbacPolicy:
+                  description: rbacPolicy reports the [RBACPolicy] sync state.
+                  minProperties: 1
+                  properties:
+                    grant:
+                      description: |-
+                        grant reports whether [RBACPolicy] objects may be live in the child cluster. Set before
+                        the first write there, cleared only after a complete revoke.
+                      enum:
+                        - Granted
+                      type: string
+                    lastAppliedGeneration:
+                      description: lastAppliedGeneration is the lastAppliedPolicy generation of the last successful sync.
+                      format: int64
+                      minimum: 1
+                      type: integer
+                    lastAppliedPolicy:
+                      description: lastAppliedPolicy is the [RBACPolicy] name of the last successful sync.
+                      maxLength: 256
+                      minLength: 1
+                      type: string
+                    lastAppliedTime:
+                      description: lastAppliedTime is when a sync last succeeded, periodic resyncs included.
+                      format: date-time
+                      type: string
+                    lastSyncTime:
+                      description: |-
+                        lastSyncTime is when the last sync or revoke attempt completed. A retry failing with the
+                        same hash, reason and message (any message, if unreachable) refreshes it at most every
+                        5 minutes. Cleared once a revoke completes.
+                      format: date-time
+                      type: string
+                    syncHash:
+                      description: |-
+                        syncHash identifies the [RBACPolicy] revision and resync request of the last attempt. It
+                        changes on the first attempt after a new resync annotation value, so a client can wait for
+                        it to change. It does not change while no attempt is made, e.g. the cluster is provisioning.
+                      maxLength: 64
+                      minLength: 1
+                      type: string
+                  type: object
                 rbacPolicyGrant:
                   description: |-
-                    rbacPolicyGrant reports whether ClusterRoles and ClusterRoleBindings derived from the
-                    [RBACPolicy] named by spec.rbacPolicy may be live in this ClusterDeployment's child cluster.
-                    Empty means none are: either nothing was ever applied there, or everything that was has
-                    since been revoked. See [RBACPolicyGrantState].
+                    rbacPolicyGrant mirrors rbacPolicy.grant for earlier releases.
+
+                    Deprecated: use rbacPolicy.grant. Kept for upgrades and downgrades.
                   enum:
                     - Granted
                   type: string
