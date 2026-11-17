@@ -3,6 +3,10 @@ kind: K0smotronControlPlane
 metadata:
   name: {{ include "k0smotroncontrolplane.name" . }}
 spec:
+  {{- with .Values.certificateRefs }}
+  certificateRefs:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   version: {{ .Values.k0s.version | replace "+" "-"  | quote }}
   persistence:
     type: emptyDir

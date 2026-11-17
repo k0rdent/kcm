@@ -156,19 +156,37 @@ func streamPaginatedNodes(ctx context.Context, cl client.Client, limit int64, ha
 	return nil
 }
 
-// listAsPartial lists objects with the given GVK. WARN: Does NOT paginate results.
-func listAsPartial(ctx context.Context, c client.Client, gvk schema.GroupVersionKind) ([]metav1.PartialObjectMetadata, error) {
-	ll := new(metav1.PartialObjectMetadataList)
-	ll.SetGroupVersionKind(gvk)
+// defaultPartialListLimit is the page size used by [listAsPartial], matching kubectl's default list chunk size.
+const defaultPartialListLimit = 500
 
-	// NOTE: PartialObjectMetadata does not support Continue until it explicitly set in the cached client to bypass the cache for this Kind.
-	// Using the PartialObjectMetadata is already an optimization so we let the cached client to do his job without limiting results.
-	// Suggestion: split the function into 2 (mgmt and child), because we have the control over the latter.
-	if err := c.List(ctx, ll); err != nil {
-		return nil, fmt.Errorf("failed to list %s: %w", gvk.String(), err)
+// listAsPartial lists all objects with the given GVK, paging through the results via
+// the List continuation token so that clusters with more objects than fit in a single
+// API response (e.g. CAPI Clusters, DaemonSets, VirtualMachineInstances) are not truncated.
+func listAsPartial(ctx context.Context, c client.Client, gvk schema.GroupVersionKind) ([]metav1.PartialObjectMetadata, error) {
+	return listAsPartialWithLimit(ctx, c, gvk, defaultPartialListLimit)
+}
+
+func listAsPartialWithLimit(ctx context.Context, c client.Client, gvk schema.GroupVersionKind, limit int64) ([]metav1.PartialObjectMetadata, error) {
+	var items []metav1.PartialObjectMetadata
+
+	opts := &client.ListOptions{Limit: limit}
+	for {
+		ll := new(metav1.PartialObjectMetadataList)
+		ll.SetGroupVersionKind(gvk)
+
+		if err := c.List(ctx, ll, opts); err != nil {
+			return nil, fmt.Errorf("failed to list %s: %w", gvk.String(), err)
+		}
+
+		items = append(items, ll.Items...)
+
+		opts.Continue = ll.Continue
+		if opts.Continue == "" {
+			break
+		}
 	}
 
-	return ll.Items, nil
+	return items, nil
 }
 
 func getChildScheme() (*runtime.Scheme, error) {

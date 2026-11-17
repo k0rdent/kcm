@@ -107,7 +107,6 @@ func TestClusterAuditPolicyValidateCreate(t *testing.T) {
 	}
 }
 
-//nolint:dupl
 func TestClusterAuditPolicyValidateDelete(t *testing.T) {
 	g := NewWithT(t)
 
