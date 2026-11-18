@@ -829,10 +829,13 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 
 		hr := &helmcontrollerv2.HelmRelease{}
 		Expect(k8sClient.Get(ctx, crclient.ObjectKeyFromObject(cld), hr)).NotTo(HaveOccurred())
+		// Mimic the helm-controller: the status must observe the current generation to be trusted.
+		hr.Status.ObservedGeneration = hr.Generation
 		fluxconditions.Set(hr, &metav1.Condition{
-			Type:   fluxmeta.ReadyCondition,
-			Reason: "HelmReleaseReady",
-			Status: metav1.ConditionTrue,
+			Type:               fluxmeta.ReadyCondition,
+			Reason:             "HelmReleaseReady",
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: hr.Generation,
 		})
 		Expect(k8sClient.Status().Update(ctx, hr)).To(Succeed())
 
@@ -840,6 +843,7 @@ func (tc *cldTestCase) testClusterDeploymentReconciliation(reconciler *ClusterDe
 			hr := &helmcontrollerv2.HelmRelease{}
 			g.Expect(mgrClient.Get(ctx, crclient.ObjectKeyFromObject(cld), hr)).To(Succeed())
 			g.Expect(fluxconditions.IsTrue(hr, fluxmeta.ReadyCondition)).To(BeTrue())
+			g.Expect(hr.Status.ObservedGeneration).To(Equal(hr.Generation))
 		}).Should(Succeed())
 
 		_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: cldName})
