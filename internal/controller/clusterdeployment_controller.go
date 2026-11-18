@@ -641,15 +641,9 @@ func (r *ClusterDeploymentReconciler) reconcileHelmRelease(
 		r.eventf(cd, "HelmReleaseUpdated", "Successfully updated HelmRelease %s/%s", cd.Namespace, cd.Name)
 	}
 
-	hrReadyCondition := fluxconditions.Get(hr, fluxmeta.ReadyCondition)
-	if hrReadyCondition != nil {
-		if apimeta.SetStatusCondition(cd.GetConditions(), metav1.Condition{
-			Type:               kcmv1.HelmReleaseReadyCondition,
-			Status:             hrReadyCondition.Status,
-			Reason:             hrReadyCondition.Reason,
-			Message:            hrReadyCondition.Message,
-			ObservedGeneration: cd.Generation,
-		}) {
+	hrReady, hrObserved := helmReleaseReadyCondition(hr, cd.Generation)
+	if hrReady != nil {
+		if apimeta.SetStatusCondition(cd.GetConditions(), *hrReady) && hrReady.Status == metav1.ConditionTrue {
 			r.eventf(cd, "HelmReleaseIsReady", "HelmRelease %s/%s is ready", cd.Namespace, cd.Name)
 		}
 	}
@@ -659,11 +653,38 @@ func (r *ClusterDeploymentReconciler) reconcileHelmRelease(
 		return ctrl.Result{}, err
 	}
 
-	if requeue || !fluxconditions.IsReady(hr) {
+	if requeue || !hrObserved || !fluxconditions.IsReady(hr) {
 		return ctrl.Result{RequeueAfter: r.defaultRequeueTime}, nil
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// helmReleaseReadyCondition builds the HelmReleaseReady condition from hr, reporting Unknown with observed=false until hr's status catches up with its generation.
+func helmReleaseReadyCondition(hr *helmcontrollerv2.HelmRelease, cdGeneration int64) (_ *metav1.Condition, observed bool) {
+	hrReadyCondition := fluxconditions.Get(hr, fluxmeta.ReadyCondition)
+	if hr.Status.ObservedGeneration != hr.Generation ||
+		(hrReadyCondition != nil && hrReadyCondition.ObservedGeneration != hr.Generation) {
+		return &metav1.Condition{
+			Type:               kcmv1.HelmReleaseReadyCondition,
+			Status:             metav1.ConditionUnknown,
+			Reason:             kcmv1.ProgressingReason,
+			Message:            fmt.Sprintf("HelmRelease %s/%s generation %d has not been reconciled yet", hr.Namespace, hr.Name, hr.Generation),
+			ObservedGeneration: cdGeneration,
+		}, false
+	}
+
+	if hrReadyCondition == nil {
+		return nil, true
+	}
+
+	return &metav1.Condition{
+		Type:               kcmv1.HelmReleaseReadyCondition,
+		Status:             hrReadyCondition.Status,
+		Reason:             hrReadyCondition.Reason,
+		Message:            hrReadyCondition.Message,
+		ObservedGeneration: cdGeneration,
+	}, true
 }
 
 // detectHelmChartNameChange checks if the Helm chart name in the new ClusterTemplate differs from
