@@ -1,22 +1,22 @@
 module github.com/K0rdent/kcm
 
-go 1.27.3
+go 1.27.4
 
 require (
-	cel.dev/cel-go v0.33.2
+	cel.dev/cel-go v0.33.4
 	github.com/BurntSushi/toml v1.6.0
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/a8m/envsubst v1.4.3
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cert-manager/cert-manager v1.21.3
-	github.com/fluxcd/helm-controller/api v1.6.5
-	github.com/fluxcd/pkg/apis/meta v1.38.0
-	github.com/fluxcd/pkg/runtime v0.122.0
+	github.com/fluxcd/helm-controller/api v1.7.1
+	github.com/fluxcd/pkg/apis/meta v1.39.0
+	github.com/fluxcd/pkg/runtime v0.123.0
 	github.com/fluxcd/source-controller/api v1.10.1
 	github.com/go-logr/logr v1.4.4
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-retryablehttp v0.7.8
-	github.com/onsi/ginkgo/v2 v2.33.1
+	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.44.0
 	github.com/opencontainers/go-digest v1.0.1-0.20250116041648-1e56c6daea3b
 	github.com/projectsveltos/addon-controller v1.17.0
@@ -27,10 +27,10 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/telekom/cluster-api-ipam-provider-infoblox v0.2.2
 	github.com/vmware-tanzu/velero v1.18.4
-	golang.org/x/crypto v0.58.0
-	golang.org/x/net v0.61.0
-	golang.org/x/sync v0.24.0
-	golang.org/x/text v0.43.0
+	golang.org/x/crypto v0.59.0
+	golang.org/x/net v0.63.0
+	golang.org/x/sync v0.25.0
+	golang.org/x/text v0.44.0
 	golang.org/x/time v0.16.0
 	gopkg.in/yaml.v3 v3.0.1
 	helm.sh/helm/v3 v3.22.1
@@ -39,14 +39,14 @@ require (
 	k8s.io/apimachinery v0.37.2
 	k8s.io/apiserver v0.37.2
 	k8s.io/client-go v0.37.2
-	k8s.io/kubectl v0.37.1
-	kubevirt.io/api v1.9.1
+	k8s.io/kubectl v0.37.2
+	kubevirt.io/api v1.10.0
 	kubevirt.io/containerized-data-importer-api v1.66.1
-	sigs.k8s.io/cluster-api v1.14.3
+	sigs.k8s.io/cluster-api v1.14.4
 	sigs.k8s.io/cluster-api-ipam-provider-in-cluster v1.1.0
-	sigs.k8s.io/cluster-api-operator v0.30.0
-	sigs.k8s.io/cluster-api/api v1.14.3
-	sigs.k8s.io/controller-runtime v0.25.2
+	sigs.k8s.io/cluster-api-operator v0.30.1
+	sigs.k8s.io/cluster-api/api v1.14.4
+	sigs.k8s.io/controller-runtime v0.25.3
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -180,11 +180,11 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/exp v0.0.0-20260824195058-e88cd73687aa // indirect
-	golang.org/x/mod v0.41.0 // indirect
+	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/term v0.47.0 // indirect
-	golang.org/x/tools v0.51.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
+	golang.org/x/term v0.48.0 // indirect
+	golang.org/x/tools v0.52.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
