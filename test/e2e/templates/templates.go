@@ -21,9 +21,7 @@ import (
 	"strings"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -148,29 +146,6 @@ func CreateServiceTemplate(ctx context.Context, client crclient.Client, namespac
 		Spec:      spec,
 	}
 	createAndWaitForValid(ctx, client, obj, "ServiceTemplate")
-}
-
-func CreateServiceTemplateWithDelete(ctx context.Context, client crclient.Client, namespace, name string, spec kcmv1.ServiceTemplateSpec) func() error {
-	CreateServiceTemplate(ctx, client, namespace, name, spec)
-
-	st := &kcmv1.ServiceTemplate{
-		Namespace: namespace,
-		Name:      name,
-		Spec:      spec,
-	}
-
-	stKey := crclient.ObjectKeyFromObject(st)
-	return func() error {
-		if err := client.Delete(ctx, st); crclient.IgnoreNotFound(err) != nil {
-			return err
-		}
-		Eventually(func() bool {
-			err := client.Get(ctx, stKey, &kcmv1.ServiceTemplate{})
-			return apierrors.IsNotFound(err)
-		}).WithTimeout(5 * time.Minute).WithPolling(3 * time.Second).Should(BeTrue())
-		_, _ = fmt.Fprintf(GinkgoWriter, "Deleted ServiceTemplate %s\n", stKey)
-		return nil
-	}
 }
 
 // CreateTemplateChain creates a ServiceTemplateChain and waits for it to become valid
