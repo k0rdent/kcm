@@ -28,7 +28,6 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
-//nolint:dupl
 var _ = Describe("ServiceTemplate Controller", func() {
 	var (
 		reconciler      ServiceTemplateReconciler
@@ -207,6 +206,19 @@ var _ = Describe("ServiceTemplate Controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, &serviceTemplate)).NotTo(Succeed())
+			})
+			By("creating service template with OCI remote source without interval", func() {
+				serviceTemplate.Spec = kcmv1.ServiceTemplateSpec{
+					Kustomize: &kcmv1.SourceSpec{
+						Path: ".",
+						RemoteSourceSpec: &kcmv1.RemoteSourceSpec{
+							OCI: &kcmv1.EmbeddedOCIRepositorySpec{
+								URL: "oci://ghcr.io/test/test",
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, &serviceTemplate)).To(MatchError(ContainSubstring("interval is required")))
 			})
 		})
 
@@ -418,7 +430,8 @@ var _ = Describe("ServiceTemplate Controller", func() {
 						DeploymentType: "Remote",
 						RemoteSourceSpec: &kcmv1.RemoteSourceSpec{
 							OCI: &kcmv1.EmbeddedOCIRepositorySpec{
-								URL: "oci://ghcr.io/test/test",
+								URL:      "oci://ghcr.io/test/test",
+								Interval: &metav1.Duration{Duration: time.Minute},
 							},
 						},
 					},
