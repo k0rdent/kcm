@@ -1324,6 +1324,9 @@ func helmChartFromFluxSource(
 	// the ResourceSummary used for drift detection rejects an empty ChartName.
 	chartName := path.Base(sanitizedPath)
 	if chartName == "." || chartName == "/" {
+		// For charts at the repository root there is no path segment to use, so fall
+		// back to the template name. This is only a non-empty placeholder (visible in
+		// ResourceSummary and Sveltos metrics), not the chart's actual name.
 		chartName = template.Name
 	}
 
