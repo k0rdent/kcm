@@ -28,14 +28,13 @@ defaults:
     shell: bash
 
 jobs:
-  lint-test:
-    name: Lint and Unit Test
+  # every job below is independent and runs in parallel; the slowest one,
+  # unit-test, sets the overall wall-clock time
+  lint-commit:
+    name: Validate PR and Commit Message
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    outputs:
-      version:       ${{ steps.vars.outputs.version }}
-      clusterprefix: ${{ steps.vars.outputs.clusterprefix }}
     steps:
       - name: Checkout PR merge commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -65,6 +64,17 @@ jobs:
             exit 1
           fi
 
+  lint-go:
+    name: Lint Go
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout PR merge commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Setup Go
         id: setup-go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -91,7 +101,7 @@ jobs:
             exit 1
           fi
 
-      - name: Lint
+      - name: Lint Go
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.15.0
@@ -103,6 +113,27 @@ jobs:
 
       - name: Lint Kubernetes APIs
         run: make lint-kube-api
+
+  # `make test` regenerates everything anyway, so the up-to-date check shares the job
+  unit-test:
+    name: Unit Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout PR merge commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # the generators diff committed template changes against the base branch
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
 
       - name: Verify generated files are up-to-date
         env:
@@ -154,6 +185,23 @@ jobs:
             exit 1
           fi
 
+  e2e-vars:
+    # the only consumer is the E2E job below
+    name: Compute E2E Variables
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version:       ${{ steps.vars.outputs.version }}
+      clusterprefix: ${{ steps.vars.outputs.clusterprefix }}
+    steps:
+      - name: Checkout PR merge commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # tags are required by git describe
+          fetch-depth: 0
+          persist-credentials: false
+
       - name: Compute outputs
         id: vars
         run: |
@@ -164,7 +212,6 @@ jobs:
             echo "clusterprefix=ci-$(date +%s | cut -b5-10)"
           } >> "$GITHUB_OUTPUT"
 
-  # runs in parallel with lint-test to not extend the overall wall-clock time
   lint-charts:
     name: Lint Helm Charts
     runs-on: ubuntu-latest
@@ -200,11 +247,50 @@ jobs:
       - name: Lint and test Helm charts
         run: make lint-charts
 
+  lint-actions:
+    name: Lint GitHub Actions
+    # shellcheck, which actionlint shells out to for `run:` blocks, is preinstalled
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout PR merge commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # the binary is versioned by name, so a stale cache from the restore keys
+      # is safely overridden
+      - name: Restore actionlint
+        id: cache-actionlint
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: bin/actionlint-*
+          key: actionlint-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile') }}
+          restore-keys: |
+            actionlint-${{ runner.os }}-${{ runner.arch }}-
+
+      # only a cache miss falls back to building the linter; the repo module
+      # cache is of no use for that, hence no Go caching here
+      - name: Setup Go
+        if: steps.cache-actionlint.outputs.cache-hit != 'true'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Lint workflows
+        run: make lint-actions
+
   controller-e2etest:
     name: E2E / Controller
     runs-on: ubuntu-latest
+    # gated on the cheap checks so a broken PR does not reach the E2E runner
     needs:
-      - lint-test
+      - lint-commit
+      - lint-go
+      - unit-test
+      - e2e-vars
     if: ${{ !contains( github.event.pull_request.labels.*.name, 'test e2e') }}
     permissions:
       contents: read
@@ -225,8 +311,8 @@ jobs:
       - name: Run E2E controller tests
         env:
           GINKGO_LABEL_FILTER:       'controller'
-          CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.lint-test.outputs.clusterprefix }}
-          VERSION:                   ${{ needs.lint-test.outputs.version }}
+          CLUSTER_DEPLOYMENT_PREFIX: ${{ needs.e2e-vars.outputs.clusterprefix }}
+          VERSION:                   ${{ needs.e2e-vars.outputs.version }}
         run: make test-e2e
 
       - name: Archive test results
