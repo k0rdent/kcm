@@ -35,6 +35,13 @@ on:
       - '!internal/controller/management_backup_controller.go'
       - '!internal/controller/accessmanagement_*.go'
 
+  # Nightly on main: the paths filter above only sees what a pull request
+  # touches, and a scenario can break from something it does not list -- a
+  # merge of two green branches, or the ksm-tests tag we pin. Every scenario,
+  # against whatever main is at the time.
+  schedule:
+    - cron: '43 5 * * *'
+
   workflow_dispatch:
     inputs:
       ref:
