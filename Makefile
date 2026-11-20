@@ -202,6 +202,12 @@ lint-fix: golangci-lint fmt vet fix ## Run linter with automatic fixes.
 lint-kube-api: kube-api-linter ## Run kube-api-linter against the Kubernetes APIs.
 	@$(KUBE_API_LINTER) run --config=.golangci-kal.yml ./api/...
 
+# actionlint shells out to shellcheck to lint every `run:` block;
+# without it those scripts are only parsed, not checked
+.PHONY: lint-actions
+lint-actions: actionlint ## Run actionlint against the GitHub Actions workflows.
+	@$(ACTIONLINT) -no-color
+
 .PHONY: add-license
 add-license: addlicense ## Add/update file headers.
 	$(ADDLICENSE) -c "" -ignore ".github/**" -ignore "config/**" -ignore "templates/**" -ignore "bin/**" -ignore ".*" .
@@ -671,6 +677,7 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen-$(CONTROLLER_TOOLS_VERSION)
 ENVTEST ?= $(LOCALBIN)/setup-envtest-$(ENVTEST_VERSION)
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 KUBE_API_LINTER ?= $(LOCALBIN)/golangci-lint-kube-api-linter
+ACTIONLINT ?= $(LOCALBIN)/actionlint-$(ACTIONLINT_VERSION)
 HELM ?= $(LOCALBIN)/helm-$(HELM_VERSION)
 KIND ?= $(LOCALBIN)/kind-$(KIND_VERSION)
 YQ ?= $(LOCALBIN)/yq-$(YQ_VERSION)
@@ -690,6 +697,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.21.0
 ENVTEST_VERSION ?= $(shell v='$(call gomodver,sigs.k8s.io/controller-runtime)'; printf '%s\n' "$$v" | sed -E 's/^v?([0-9]+)\.([0-9]+).*/release-\1.\2/')
 GOLANGCI_LINT_VERSION ?= v2.15.0
 GOLANGCI_LINT_TIMEOUT ?= 1m
+ACTIONLINT_VERSION ?= v1.7.12
 HELM_VERSION ?= v3.21.3
 KIND_VERSION ?= v0.33.0
 YQ_VERSION ?= v4.53.3
@@ -703,7 +711,7 @@ SUPPORT_BUNDLE_CLI_VERSION ?= v0.131.1
 GOVC_VERSION ?= v0.55.1
 
 .PHONY: cli-install
-cli-install: controller-gen envtest golangci-lint kube-api-linter helm kind yq cloud-nuke azure-nuke govc clusterctl addlicense envsubst awscli ## Install all required CLI tools.
+cli-install: controller-gen envtest golangci-lint kube-api-linter actionlint helm kind yq cloud-nuke azure-nuke govc clusterctl addlicense envsubst awscli ## Install all required CLI tools.
 
 .PHONY: helm-plugin-schema
 helm-plugin-schema: HELM_SCHEMA_PLUGIN_URL ?= https://github.com/losisin/helm-values-schema-json.git
@@ -752,6 +760,11 @@ $(GOLANGCI_LINT): | $(LOCALBIN)
 kube-api-linter: $(KUBE_API_LINTER) ## Build kube-api-linter locally if necessary.
 $(KUBE_API_LINTER): .custom-gcl.yml | $(LOCALBIN) golangci-lint
 	$(GOLANGCI_LINT) custom
+
+.PHONY: actionlint
+actionlint: $(ACTIONLINT) ## Download actionlint locally if necessary.
+$(ACTIONLINT): | $(LOCALBIN)
+	$(call go-install-tool,$(ACTIONLINT),github.com/rhysd/actionlint/cmd/actionlint,$(ACTIONLINT_VERSION))
 
 .PHONY: helm
 helm: $(HELM) ## Download Helm locally if necessary.

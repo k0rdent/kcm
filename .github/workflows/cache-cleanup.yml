@@ -42,13 +42,13 @@ jobs:
           CUTOFF: '2 days'
         run: |
           set -euo pipefail
-          cutoff=$(date -d "-${CUTOFF}" +%s)
+          cutoff_epoch=$(date -d "-${CUTOFF}" +%s)
           gh cache list --limit 1000 \
               --json id,lastAccessedAt \
               --jq '.[] | "\(.id) \(.lastAccessedAt)"' \
             | while read -r id ts; do
                 ts_epoch=$(date -d "$ts" +%s)
-                if [ "$ts_epoch" -lt "$cutoff" ]; then
+                if [ "$ts_epoch" -lt "$cutoff_epoch" ]; then
                   gh cache delete "$id" || echo "::warning::failed to delete stale cache id=$id (last accessed $ts)"
                 fi
               done

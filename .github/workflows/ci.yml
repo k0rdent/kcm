@@ -200,6 +200,42 @@ jobs:
       - name: Lint and test Helm charts
         run: make lint-charts
 
+  # runs in parallel with lint-test so a broken workflow fails fast
+  lint-actions:
+    name: Lint GitHub Actions
+    # shellcheck, which actionlint shells out to for `run:` blocks, is preinstalled
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout PR merge commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # the binary is versioned by name, so a stale cache from the restore keys
+      # is safely overridden
+      - name: Restore actionlint
+        id: cache-actionlint
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: bin/actionlint-*
+          key: actionlint-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile') }}
+          restore-keys: |
+            actionlint-${{ runner.os }}-${{ runner.arch }}-
+
+      # only a cache miss falls back to building the linter; the repo module
+      # cache is of no use for that, hence no Go caching here
+      - name: Setup Go
+        if: steps.cache-actionlint.outputs.cache-hit != 'true'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Lint workflows
+        run: make lint-actions
+
   controller-e2etest:
     name: E2E / Controller
     runs-on: ubuntu-latest
