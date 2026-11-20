@@ -28,6 +28,7 @@ func TestConfig_validate(t *testing.T) {
 	t.Run("valid config", func(t *testing.T) {
 		cfg := &Config{
 			ParentClient:     fake.NewClientBuilder().Build(),
+			DirectReader:     fake.NewClientBuilder().Build(),
 			Mode:             ModeLocal,
 			SystemNamespace:  "kube-system",
 			Interval:         10 * time.Minute,
@@ -47,6 +48,19 @@ func TestConfig_validate(t *testing.T) {
 		}
 		err := cfg.validate()
 		require.ErrorContains(t, err, "management client")
+	})
+
+	t.Run("missing direct reader", func(t *testing.T) {
+		cfg := &Config{
+			ParentClient:     fake.NewClientBuilder().Build(),
+			Mode:             ModeLocal,
+			Interval:         10 * time.Minute,
+			JitterPercentage: 5,
+			Concurrency:      1,
+			LocalBaseDir:     "some",
+		}
+		err := cfg.validate()
+		require.ErrorContains(t, err, "direct reader")
 	})
 
 	t.Run("invalid concurrency", func(t *testing.T) {
@@ -85,6 +99,7 @@ func TestConfig_validate(t *testing.T) {
 	t.Run("empty directory in local mode", func(t *testing.T) {
 		cfg := &Config{
 			ParentClient:     fake.NewClientBuilder().Build(),
+			DirectReader:     fake.NewClientBuilder().Build(),
 			Concurrency:      1,
 			Mode:             ModeLocal,
 			Interval:         10 * time.Minute,
@@ -97,6 +112,7 @@ func TestConfig_validate(t *testing.T) {
 	t.Run("unknown mode", func(t *testing.T) {
 		cfg := &Config{
 			ParentClient:     fake.NewClientBuilder().Build(),
+			DirectReader:     fake.NewClientBuilder().Build(),
 			Concurrency:      1,
 			Interval:         10 * time.Minute,
 			JitterPercentage: 10,
@@ -109,6 +125,7 @@ func TestConfig_validate(t *testing.T) {
 	t.Run("empty mode", func(t *testing.T) {
 		cfg := &Config{
 			ParentClient:     fake.NewClientBuilder().Build(),
+			DirectReader:     fake.NewClientBuilder().Build(),
 			Concurrency:      1,
 			Interval:         10 * time.Minute,
 			JitterPercentage: 10,

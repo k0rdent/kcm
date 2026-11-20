@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 // parentDataFetcher fetches data from the local cluster, either mgmt or regional.
@@ -79,42 +80,52 @@ func (f *parentDataFetcher) retry(ctx context.Context, op func() error) error {
 	}, backoff.WithContext(f.expBackoff, ctx))
 }
 
-func (f *parentDataFetcher) fetch(ctx context.Context, parentClient client.Client, dataScope scope) error {
+// fetch reads the parent cluster data page by page, which only pays off for an uncached
+// parentReader, see [kubeutil.EachPage].
+func (f *parentDataFetcher) fetch(ctx context.Context, parentReader client.Reader, dataScope scope) error {
 	if dataScope.isOnline() && dataScope.isMgmt() {
-		templatesList := new(kcmv1.ClusterTemplateList)
+		f.mgmtTemplateName2Template = make(map[client.ObjectKey]*kcmv1.ClusterTemplate)
 		if err := f.retry(ctx, func() error {
-			return parentClient.List(ctx, templatesList)
+			clear(f.mgmtTemplateName2Template) // a retried fetch starts over
+			return kubeutil.EachPage(ctx, parentReader, func() *kcmv1.ClusterTemplateList { return new(kcmv1.ClusterTemplateList) },
+				func(page *kcmv1.ClusterTemplateList) (bool, error) {
+					for _, template := range page.Items {
+						f.mgmtTemplateName2Template[client.ObjectKey{Namespace: template.Namespace, Name: template.Name}] = &template
+					}
+					return true, nil
+				})
 		}); err != nil {
 			return fmt.Errorf("failed to list ClusterTemplates: %w", err)
-		}
-
-		f.mgmtTemplateName2Template = make(map[client.ObjectKey]*kcmv1.ClusterTemplate, len(templatesList.Items))
-		for _, template := range templatesList.Items {
-			f.mgmtTemplateName2Template[client.ObjectKey{Namespace: template.Namespace, Name: template.Name}] = &template
 		}
 	}
 
 	if dataScope.isMgmt() {
-		clds := new(kcmv1.ClusterDeploymentList)
 		if err := f.retry(ctx, func() error {
-			return parentClient.List(ctx, clds)
+			f.clusters = nil // a retried fetch starts over
+			return kubeutil.EachPage(ctx, parentReader, func() *kcmv1.ClusterDeploymentList { return new(kcmv1.ClusterDeploymentList) },
+				func(page *kcmv1.ClusterDeploymentList) (bool, error) {
+					for _, v := range page.Items {
+						if v.Status.Region != "" {
+							continue
+						}
+
+						f.clusters = append(f.clusters, &v)
+					}
+					return true, nil
+				})
 		}); err != nil {
 			return fmt.Errorf("failed to list ClusterDeployments: %w", err)
-		}
-
-		f.clusters = make([]client.Object, 0, len(clds.Items))
-		for _, v := range clds.Items {
-			if v.Status.Region != "" {
-				continue
-			}
-
-			f.clusters = append(f.clusters, &v)
 		}
 	}
 
 	f.profilesList = new(addoncontrollerv1beta1.ProfileList)
 	if err := f.retry(ctx, func() error {
-		return parentClient.List(ctx, f.profilesList)
+		f.profilesList.Items = nil // a retried fetch starts over
+		return kubeutil.EachPage(ctx, parentReader, func() *addoncontrollerv1beta1.ProfileList { return new(addoncontrollerv1beta1.ProfileList) },
+			func(page *addoncontrollerv1beta1.ProfileList) (bool, error) {
+				f.profilesList.Items = append(f.profilesList.Items, page.Items...)
+				return true, nil
+			})
 	}); err != nil {
 		return fmt.Errorf("failed to list Profiles: %w", err)
 	}
@@ -122,7 +133,7 @@ func (f *parentDataFetcher) fetch(ctx context.Context, parentClient client.Clien
 	var partialCapiClusters []metav1.PartialObjectMetadata
 	if err := f.retry(ctx, func() error {
 		var lerr error
-		partialCapiClusters, lerr = getPartialCAPIClusters(ctx, parentClient)
+		partialCapiClusters, lerr = getPartialCAPIClusters(ctx, parentReader)
 		if lerr != nil {
 			return lerr
 		}
@@ -144,9 +155,9 @@ func (f *parentDataFetcher) fetch(ctx context.Context, parentClient client.Clien
 	return nil
 }
 
-func getPartialCAPIClusters(ctx context.Context, mgmtClient client.Client) ([]metav1.PartialObjectMetadata, error) {
+func getPartialCAPIClusters(ctx context.Context, mgmtReader client.Reader) ([]metav1.PartialObjectMetadata, error) {
 	clustersGVK := clusterapiv1.GroupVersion.WithKind(clusterapiv1.ClusterKind)
-	partialCAPIClusters, err := listAsPartial(ctx, mgmtClient, clustersGVK)
+	partialCAPIClusters, err := listAsPartial(ctx, mgmtReader, clustersGVK)
 	if err != nil {
 		if !meta.IsNoMatchError(err) {
 			return nil, fmt.Errorf("failed to list all %s: %w", clustersGVK.String(), err)

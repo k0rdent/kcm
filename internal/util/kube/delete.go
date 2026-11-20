@@ -46,14 +46,23 @@ func DeleteAllExceptAndWait[T client.Object](
 	exclude DeletionExcludeFn[T],
 	extraOpts ...client.DeleteAllOfOption,
 ) error {
-	namespaces := new(corev1.NamespaceList)
-	if err := c.List(ctx, namespaces); client.IgnoreNotFound(err) != nil {
+	namespaces, err := listNamespaceNames(ctx, c)
+	if err != nil {
 		return fmt.Errorf("failed to list namespaces: %w", err)
 	}
 
-	for _, ns := range namespaces.Items {
+	newList := func() client.ObjectList {
+		cp, ok := list.DeepCopyObject().(client.ObjectList)
+		if !ok { // unreachable: a deep copy of an ObjectList is an ObjectList
+			return list
+		}
+
+		return cp
+	}
+
+	for _, ns := range namespaces {
 		if exclude == nil {
-			opts := append([]client.DeleteAllOfOption{client.InNamespace(ns.Name)}, extraOpts...)
+			opts := append([]client.DeleteAllOfOption{client.InNamespace(ns)}, extraOpts...)
 			if err := c.DeleteAllOf(ctx, obj, opts...); client.IgnoreNotFound(err) != nil {
 				return fmt.Errorf("failed to delete collection: %w", err)
 			}
@@ -61,57 +70,86 @@ func DeleteAllExceptAndWait[T client.Object](
 			continue
 		}
 
-		if err := c.List(ctx, list, client.InNamespace(ns.Name)); client.IgnoreNotFound(err) != nil {
-			return fmt.Errorf("failed to list in %q: %w", ns.Name, err)
-		}
-
-		items, err := apimeta.ExtractList(list)
-		if err != nil {
-			return fmt.Errorf("failed to extract list: %w", err)
-		}
-
-		for _, v := range items {
-			o, ok := v.(T)
-			if !ok {
-				return fmt.Errorf("unexpected list item type %T", v)
+		err := EachPage(ctx, c, newList, func(page client.ObjectList) (bool, error) {
+			items, err := apimeta.ExtractList(page)
+			if err != nil {
+				return false, fmt.Errorf("failed to extract list: %w", err)
 			}
 
-			if exclude != nil && exclude(o) {
-				continue
+			for _, v := range items {
+				o, ok := v.(T)
+				if !ok {
+					return false, fmt.Errorf("unexpected list item type %T", v)
+				}
+
+				if exclude(o) {
+					continue
+				}
+
+				if err := c.Delete(ctx, o); client.IgnoreNotFound(err) != nil {
+					return false, fmt.Errorf("failed to delete %s %s: %w", o.GetObjectKind().GroupVersionKind().String(), client.ObjectKeyFromObject(o), err)
+				}
 			}
 
-			if err := c.Delete(ctx, o); client.IgnoreNotFound(err) != nil {
-				return fmt.Errorf("failed to delete %s %s: %w", o.GetObjectKind().GroupVersionKind().String(), client.ObjectKeyFromObject(o), err)
-			}
+			return true, nil
+		}, client.InNamespace(ns))
+		if client.IgnoreNotFound(err) != nil {
+			return fmt.Errorf("failed to delete in %q: %w", ns, err)
 		}
 	}
 
 	const interval = 500 * time.Millisecond
 	return wait.PollUntilContextTimeout(ctx, interval, timeout, true, func(ctx context.Context) (bool, error) {
-		if err := c.List(ctx, list); client.IgnoreNotFound(err) != nil {
+		remaining := false
+		// a single object left to delete is enough to keep waiting, hence the paging stops on the first one
+		err := EachPage(ctx, c, newList, func(page client.ObjectList) (bool, error) {
+			objs, err := apimeta.ExtractList(page)
+			if err != nil {
+				return false, fmt.Errorf("failed to extract list during wait: %w", err)
+			}
+
+			for _, v := range objs {
+				o, ok := v.(T)
+				if !ok {
+					return false, fmt.Errorf("unexpected list item type %T", v)
+				}
+
+				if exclude != nil && exclude(o) {
+					continue
+				}
+
+				remaining = true
+
+				return false, nil
+			}
+
+			return true, nil
+		})
+		if client.IgnoreNotFound(err) != nil {
 			return false, fmt.Errorf("failed to list during wait: %w", err)
 		}
 
-		objs, err := apimeta.ExtractList(list)
-		if err != nil {
-			return false, fmt.Errorf("failed to extract list during wait: %w", err)
+		return !remaining, nil
+	})
+}
+
+// listNamespaceNames pages through the namespaces fetching only metadata, the names are
+// all the deletion helpers need.
+func listNamespaceNames(ctx context.Context, c client.Client) ([]string, error) {
+	var names []string
+
+	err := EachPage(ctx, c, func() *metav1.PartialObjectMetadataList {
+		l := new(metav1.PartialObjectMetadataList)
+		l.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("Namespace"))
+		return l
+	}, func(page *metav1.PartialObjectMetadataList) (bool, error) {
+		for _, ns := range page.Items {
+			names = append(names, ns.Name)
 		}
-
-		for _, v := range objs {
-			o, ok := v.(T)
-			if !ok {
-				return true, fmt.Errorf("unexpected list item type %T", v) // NOTE: return without wait
-			}
-
-			if exclude != nil && exclude(o) {
-				continue
-			}
-
-			return false, nil
-		}
-
 		return true, nil
 	})
+
+	return names, client.IgnoreNotFound(err)
 }
 
 // allowedOwnerKinds lists the allowed top-level controller group+kind we accept.
@@ -133,8 +171,8 @@ func DeletePVCsAndOwnersAndWait(
 	timeout time.Duration,
 	exclude DeletionExcludeFn[*corev1.PersistentVolumeClaim],
 ) error {
-	namespaces := new(corev1.NamespaceList)
-	if err := c.List(ctx, namespaces); client.IgnoreNotFound(err) != nil {
+	namespaces, err := listNamespaceNames(ctx, c)
+	if err != nil {
 		return fmt.Errorf("failed to list namespaces: %w", err)
 	}
 
@@ -146,64 +184,33 @@ func DeletePVCsAndOwnersAndWait(
 		return fmt.Errorf("failed to collect PVs: %w", err)
 	}
 
-	for _, ns := range namespaces.Items {
-		pvcList := new(corev1.PersistentVolumeClaimList)
-		if err := c.List(ctx, pvcList, client.InNamespace(ns.Name)); client.IgnoreNotFound(err) != nil {
-			return fmt.Errorf("failed to list PVCs in %q: %w", ns.Name, err)
-		}
+	for _, ns := range namespaces {
+		var podsByPVC map[string][]corev1.Pod // built lazily: namespaces without PVCs never list pods
 
-		for _, pvc := range pvcList.Items {
-			if exclude != nil && exclude(&pvc) {
-				continue
-			}
-
-			ldebug.Info("Processing PVC", "pvc namespace", pvc.Namespace, "pvc name", pvc.Name)
-
-			pods, err := findPodsUsingPVC(ctx, c, ns.Name, pvc.Name)
-			if err != nil {
-				return fmt.Errorf("failed to find pods using pvc %s/%s: %w", ns.Name, pvc.Name, err)
-			}
-
-			for _, pod := range pods {
-				ldebug.Info("Processing Pod", "pod namespace", pod.Namespace, "pod name", pod.Name)
-
-				topOwner, err := findTopLevelAllowedController(ctx, c, &pod.ObjectMeta)
-				if err != nil {
-					return fmt.Errorf("failed to resolve owners for pod %s/%s: %w", pod.Namespace, pod.Name, err)
-				}
-
-				if topOwner == nil {
-					ldebug.Info("Deleting Pod", "pod namespace", pod.Namespace, "pod name", pod.Name)
-
-					// delete plain pod
-					if err := c.Delete(ctx, &pod); client.IgnoreNotFound(err) != nil {
-						return fmt.Errorf("failed to delete pod %s/%s: %w", pod.Namespace, pod.Name, err)
+		err := EachPage(ctx, c, func() *corev1.PersistentVolumeClaimList { return new(corev1.PersistentVolumeClaimList) },
+			func(page *corev1.PersistentVolumeClaimList) (bool, error) {
+				for i := range page.Items {
+					pvc := &page.Items[i]
+					if exclude != nil && exclude(pvc) {
+						continue
 					}
 
-					if err := removeFinalizers(ctx, c, &pod); err != nil {
-						ldebug.Error(err, "failed to remove finalizers from pod", "pod ns", pod.Namespace, "pod name", pod.Name)
+					if podsByPVC == nil {
+						var err error
+						if podsByPVC, err = findPodsUsingPVCs(ctx, c, ns); err != nil {
+							return false, fmt.Errorf("failed to find pods using PVCs in %q: %w", ns, err)
+						}
 					}
 
-					continue
+					if err := deletePVCAndConsumers(ctx, c, pvc, podsByPVC[pvc.Name]); err != nil {
+						return false, err
+					}
 				}
 
-				ldebug.Info("Deleting top owner", "owner namespace", topOwner.GetNamespace(), "owner name", topOwner.GetName(), "owner kind", topOwner.GetKind())
-				// delete top owner of the pod (pod should be gc-ed)
-				if err := c.Delete(ctx, topOwner); client.IgnoreNotFound(err) != nil {
-					return fmt.Errorf("failed to delete owner %s/%s (kind=%s): %w",
-						topOwner.GetNamespace(), topOwner.GetName(), topOwner.GetKind(), err)
-				}
-
-				if err := removeFinalizers(ctx, c, topOwner); err != nil {
-					ldebug.Error(err, "failed to remove finalizers from owner", "owner ns", topOwner.GetNamespace(), "owner name", topOwner.GetName(), "owner kind", topOwner.GetKind())
-				}
-			}
-
-			// delete the PVC itself
-			ldebug.Info("Deleting PVC", "pvc namespace", pvc.Namespace, "pvc name", pvc.Name)
-			if err := c.Delete(ctx, &pvc); client.IgnoreNotFound(err) != nil {
-				return fmt.Errorf("failed to delete pvc %s/%s: %w", pvc.Namespace, pvc.Name, err)
-			}
+				return true, nil
+			}, client.InNamespace(ns))
+		if client.IgnoreNotFound(err) != nil {
+			return fmt.Errorf("failed to delete PVCs in %q: %w", ns, err)
 		}
 	}
 
@@ -250,55 +257,122 @@ func DeletePVCsAndOwnersAndWait(
 }
 
 func collectPersistentVolumeNames(ctx context.Context, c client.Client, exclude DeletionExcludeFn[*corev1.PersistentVolumeClaim]) (map[string]corev1.PersistentVolumeReclaimPolicy, error) {
-	pvList := new(corev1.PersistentVolumeList)
-	if err := c.List(ctx, pvList); err != nil {
-		return nil, fmt.Errorf("failed to list PVs: %w", err)
-	}
-
 	pvWaitList := make(map[string]corev1.PersistentVolumeReclaimPolicy)
-	for _, pv := range pvList.Items {
-		claim := pv.Spec.ClaimRef
-		if claim == nil {
-			continue // released
-		}
 
-		// check if the pvc exists and is not excluded
-		pvc := new(corev1.PersistentVolumeClaim)
-		err := c.Get(ctx, client.ObjectKey{Namespace: claim.Namespace, Name: claim.Name}, pvc)
-		switch {
-		case apierrors.IsNotFound(err): // pvc deleted but the pv is still there thus wait for it
-			pvWaitList[pv.Name] = pv.Spec.PersistentVolumeReclaimPolicy
+	err := EachPage(ctx, c, func() *corev1.PersistentVolumeList { return new(corev1.PersistentVolumeList) },
+		func(page *corev1.PersistentVolumeList) (bool, error) {
+			for _, pv := range page.Items {
+				claim := pv.Spec.ClaimRef
+				if claim == nil {
+					continue // released
+				}
 
-		case err != nil:
-			return nil, fmt.Errorf("failed to get PVC %s/%s for PV %s: %w", claim.Namespace, claim.Name, pv.Name, err)
+				// check if the pvc exists and is not excluded
+				pvc := new(corev1.PersistentVolumeClaim)
+				err := c.Get(ctx, client.ObjectKey{Namespace: claim.Namespace, Name: claim.Name}, pvc)
+				switch {
+				case apierrors.IsNotFound(err): // pvc deleted but the pv is still there thus wait for it
+					pvWaitList[pv.Name] = pv.Spec.PersistentVolumeReclaimPolicy
 
-		default:
-			if exclude != nil && exclude(pvc) {
-				continue
+				case err != nil:
+					return false, fmt.Errorf("failed to get PVC %s/%s for PV %s: %w", claim.Namespace, claim.Name, pv.Name, err)
+
+				default:
+					if exclude != nil && exclude(pvc) {
+						continue
+					}
+
+					pvWaitList[pv.Name] = pv.Spec.PersistentVolumeReclaimPolicy
+				}
 			}
 
-			pvWaitList[pv.Name] = pv.Spec.PersistentVolumeReclaimPolicy
-		}
+			return true, nil
+		})
+	if err != nil {
+		return nil, err // either a list or a get error, both already descriptive
 	}
 
 	return pvWaitList, nil
 }
 
-// findPodsUsingPVC lists pods in namespace and returns pods that reference claimName.
-func findPodsUsingPVC(ctx context.Context, c client.Client, namespace, claimName string) ([]corev1.Pod, error) {
-	podList := new(corev1.PodList)
-	if err := c.List(ctx, podList, client.InNamespace(namespace)); client.IgnoreNotFound(err) != nil {
-		return nil, fmt.Errorf("failed to list pods: %w", err)
+// deletePVCAndConsumers removes the pods holding the given PVC, preferring their top-level
+// controller so the pods are not recreated, and then the PVC itself. Finalizer removal
+// failures are logged, not propagated: the object is already being deleted.
+func deletePVCAndConsumers(ctx context.Context, c client.Client, pvc *corev1.PersistentVolumeClaim, pods []corev1.Pod) error {
+	ldebug := log.FromContext(ctx).V(1)
+
+	ldebug.Info("Processing PVC", "pvc namespace", pvc.Namespace, "pvc name", pvc.Name)
+
+	for _, pod := range pods {
+		ldebug.Info("Processing Pod", "pod namespace", pod.Namespace, "pod name", pod.Name)
+
+		topOwner, err := findTopLevelAllowedController(ctx, c, &pod.ObjectMeta)
+		if err != nil {
+			return fmt.Errorf("failed to resolve owners for pod %s/%s: %w", pod.Namespace, pod.Name, err)
+		}
+
+		if topOwner == nil {
+			ldebug.Info("Deleting Pod", "pod namespace", pod.Namespace, "pod name", pod.Name)
+
+			// delete plain pod
+			if err := c.Delete(ctx, &pod); client.IgnoreNotFound(err) != nil {
+				return fmt.Errorf("failed to delete pod %s/%s: %w", pod.Namespace, pod.Name, err)
+			}
+
+			if err := removeFinalizers(ctx, c, &pod); err != nil {
+				ldebug.Error(err, "failed to remove finalizers from pod", "pod ns", pod.Namespace, "pod name", pod.Name)
+			}
+
+			continue
+		}
+
+		ldebug.Info("Deleting top owner", "owner namespace", topOwner.GetNamespace(), "owner name", topOwner.GetName(), "owner kind", topOwner.GetKind())
+		// delete top owner of the pod (pod should be gc-ed)
+		if err := c.Delete(ctx, topOwner); client.IgnoreNotFound(err) != nil {
+			return fmt.Errorf("failed to delete owner %s/%s (kind=%s): %w",
+				topOwner.GetNamespace(), topOwner.GetName(), topOwner.GetKind(), err)
+		}
+
+		if err := removeFinalizers(ctx, c, topOwner); err != nil {
+			ldebug.Error(err, "failed to remove finalizers from owner", "owner ns", topOwner.GetNamespace(), "owner name", topOwner.GetName(), "owner kind", topOwner.GetKind())
+		}
 	}
 
-	var out []corev1.Pod
-	for _, p := range podList.Items {
-		for _, vol := range p.Spec.Volumes {
-			if vol.PersistentVolumeClaim != nil && vol.PersistentVolumeClaim.ClaimName == claimName {
-				out = append(out, p)
-				break
+	ldebug.Info("Deleting PVC", "pvc namespace", pvc.Namespace, "pvc name", pvc.Name)
+	if err := c.Delete(ctx, pvc); client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to delete pvc %s/%s: %w", pvc.Namespace, pvc.Name, err)
+	}
+
+	return nil
+}
+
+// findPodsUsingPVCs pages through the pods of the namespace and indexes by claim name the
+// pods referencing it. Only metadata is kept, that is all the callers need (owner walk and
+// deletion), and a single pass replaces re-listing the whole namespace for every single PVC.
+func findPodsUsingPVCs(ctx context.Context, c client.Client, namespace string) (map[string][]corev1.Pod, error) {
+	out := make(map[string][]corev1.Pod)
+
+	err := EachPage(ctx, c, func() *corev1.PodList { return new(corev1.PodList) },
+		func(page *corev1.PodList) (bool, error) {
+			for i := range page.Items {
+				pod := &page.Items[i]
+
+				claims := make(map[string]struct{}, len(pod.Spec.Volumes)) // a pod may mount the very same claim twice
+				for _, vol := range pod.Spec.Volumes {
+					if vol.PersistentVolumeClaim != nil {
+						claims[vol.PersistentVolumeClaim.ClaimName] = struct{}{}
+					}
+				}
+
+				for claim := range claims {
+					out[claim] = append(out[claim], corev1.Pod{ObjectMeta: pod.ObjectMeta})
+				}
 			}
-		}
+
+			return true, nil
+		}, client.InNamespace(namespace))
+	if client.IgnoreNotFound(err) != nil {
+		return nil, fmt.Errorf("failed to list pods: %w", err)
 	}
 
 	return out, nil

@@ -36,6 +36,7 @@ type (
 	LocalCollector struct {
 		file         *file
 		parentClient client.Client
+		parentReader client.Reader // uncached, the parent cluster data is read page by page
 		childScheme  *runtime.Scheme
 		childFactory func([]byte, *runtime.Scheme) (client.Client, error) // for test mocks
 		concurrency  int
@@ -52,7 +53,7 @@ type (
 const labelCluster = "cluster" // clusterdeployment namespaced name, used for cluster search
 
 // NewLocalCollector creates a new instance of the [LocalCollector].
-func NewLocalCollector(parentClient client.Client, baseDir string, concurrency int) (*LocalCollector, error) {
+func NewLocalCollector(parentClient client.Client, parentReader client.Reader, baseDir string, concurrency int) (*LocalCollector, error) {
 	childScheme, err := getChildScheme()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create child client scheme: %w", err)
@@ -66,6 +67,7 @@ func NewLocalCollector(parentClient client.Client, baseDir string, concurrency i
 	return &LocalCollector{
 		file:         f,
 		parentClient: parentClient,
+		parentReader: parentReader,
 		childScheme:  childScheme,
 		concurrency:  concurrency,
 		childFactory: kubeutil.DefaultClientFactory,
@@ -94,7 +96,7 @@ func (l *LocalCollector) Collect(ctx context.Context) error {
 		return fmt.Errorf("failed to get current scope: %w", err)
 	}
 
-	if err := parentData.fetch(ctx, l.parentClient, dataScope); err != nil {
+	if err := parentData.fetch(ctx, l.parentReader, dataScope); err != nil {
 		return fmt.Errorf("failed to fetch data from parent cluster: %w", err)
 	}
 
