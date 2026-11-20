@@ -287,6 +287,7 @@ jobs:
     runs-on: ubuntu-latest
     # gated on the cheap checks so a broken PR does not reach the E2E runner
     needs:
+      - lint-commit
       - lint-go
       - unit-test
       - e2e-vars
