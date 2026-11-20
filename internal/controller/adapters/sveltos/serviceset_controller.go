@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"path"
 	"reflect"
 	"slices"
 	"strings"
@@ -1319,6 +1320,16 @@ func helmChartFromFluxSource(
 	sanitizedPath := strings.TrimPrefix(strings.TrimPrefix(chartSource.Path, "."), "/")
 	url := fmt.Sprintf("%s://%s/%s/%s", status.Kind, status.Namespace, status.Name, sanitizedPath)
 
+	// Sveltos ignores ChartName when it installs a chart from a Flux source, but
+	// the ResourceSummary used for drift detection rejects an empty ChartName.
+	chartName := path.Base(sanitizedPath)
+	if chartName == "." || chartName == "/" {
+		// For charts at the repository root there is no path segment to use, so fall
+		// back to the template name. This is only a non-empty placeholder (visible in
+		// ResourceSummary and Sveltos metrics), not the chart's actual name.
+		chartName = template.Name
+	}
+
 	helmOptions := template.Spec.HelmOptions
 	if helmOptions == nil {
 		helmOptions = svc.HelmOptions
@@ -1327,6 +1338,7 @@ func helmChartFromFluxSource(
 	mergeHelmOptions(svc.HelmOptions, helmOptions)
 	helmChart = addoncontrollerv1beta1.HelmChart{
 		RepositoryURL:    url,
+		ChartName:        chartName,
 		ReleaseName:      svc.Name,
 		ReleaseNamespace: svc.Namespace,
 		Values:           svc.Values,
