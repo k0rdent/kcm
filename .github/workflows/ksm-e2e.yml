@@ -40,7 +40,7 @@ on:
   # merge of two green branches, or the ksm-tests tag we pin. Every scenario,
   # against whatever main is at the time.
   schedule:
-    - cron: '43 5 * * *'
+    - cron: '21 3 * * 1-5' # 03:21 UTC; Mon-Fri
 
   workflow_dispatch:
     inputs:
@@ -66,12 +66,12 @@ jobs:
     # Pinned, not floating: the scenarios live in another repository, and on main
     # a change there would turn this red with nothing in this repository to
     # explain it. Bumping the tag is a pull request like any other.
-    uses: k0rdent/ksm-tests/.github/workflows/e2e.yml@v1.4.0
+    uses: k0rdent/ksm-tests/.github/workflows/e2e.yml@v1.5.1
     with:
       # The same ref as the uses: line above. A called workflow cannot discover
       # the ref it was reached at -- no context exposes it -- so it has to be
       # told, or it checks this repository out in place of its own.
-      ksm_ref: v1.4.0
+      ksm_ref: v1.5.1
       # The head commit, not the ref: a branch moves, and the run should say
       # exactly what it tested. head.repo is the fork on a fork pull request,
       # and the caller's own repository for a manual run.
@@ -82,4 +82,28 @@ jobs:
       # a label -- it assumes we know which of them a change can break, and
       # #3080 is what happens when that assumption is wrong. They run in
       # parallel, so all of them cost about as long as any one of them.
+      scenarios: ${{ inputs.scenarios }}
+
+  # The serial pipeline: one cluster per provider, every scenario run on it in
+  # turn. Nightly and by hand, never on a pull request -- it provisions real
+  # infrastructure, and that is budget nobody meant to spend on a push.
+  ksm-cloud:
+    name: KSM Cloud
+    # Named, not 'not a pull request': an event added later opts in on purpose.
+    if: github.event_name == 'schedule'
+    # A failed or skipped dependency skips this job; the if: above keeps that.
+    needs: ksm
+    # v1.5.1: the first tag declaring the secrets, so a call may name them.
+    uses: k0rdent/ksm-tests/.github/workflows/e2e-serial.yml@v1.5.1
+    # Named, not inherited: 'inherit' would pass them under the names used here.
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.E2E_KSM_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.E2E_KSM_AWS_SECRET_ACCESS_KEY }}
+    with:
+      # The same ref as the uses: line, for the reason the job above gives.
+      ksm_ref: v1.5.1
+      KCM: ${{ inputs.ref || github.sha }}
+      KCM_MODE: source
+      SRC_URL: ${{ format('{0}/{1}.git', github.server_url, github.repository) }}
+      providers: adopted,aws
       scenarios: ${{ inputs.scenarios }}
