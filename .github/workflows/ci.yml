@@ -197,6 +197,10 @@ jobs:
           restore-keys: |
             helm-tooling-${{ runner.os }}-${{ runner.arch }}-
 
+      - name: Verify main carries the placeholder version
+        if: github.base_ref == 'main'
+        run: make check-version-placeholder
+
       - name: Lint and test Helm charts
         run: make lint-charts
 

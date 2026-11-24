@@ -2,6 +2,8 @@ NAMESPACE ?= kcm-system
 VERSION ?= $(shell git describe --tags --always)
 VERSION := $(patsubst v%,%,$(VERSION))
 FQDN_VERSION = $(subst .,-,$(VERSION))
+# version committed on main; real versions live on release branches and are stamped from the tag at build time
+KCM_VERSION_PLACEHOLDER := 0.0.0-dev
 # Image URL to use all building/pushing image targets
 IMG ?= localhost/kcm/controller:latest
 IMG_REPO = $(shell echo $(IMG) | cut -d: -f1)
@@ -111,8 +113,17 @@ set-kcm-repo: yq ## Update controller image repositories in values files.
 set-templates-repo: yq ## Update templates repository URL in values files.
 	$(YQ) eval '.controller.templatesRepoURL = "$(REGISTRY_REPO)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/values.yaml
 
+.PHONY: check-version-placeholder
+check-version-placeholder: yq ## Verify KCM charts and Release carry the placeholder version.
+	@YQ=$(YQ) KCM_VERSION_PLACEHOLDER=$(KCM_VERSION_PLACEHOLDER) PROVIDER_TEMPLATES_DIR=$(PROVIDER_TEMPLATES_DIR) $(SHELL) hack/check-version-placeholder.bash
+
 .PHONY: kcm-chart-release
 kcm-chart-release: set-kcm-version templates-generate ## Generate KCM chart content for publishing.
+	@if grep -rlF --exclude=Chart.lock --exclude-dir=charts -e '$(KCM_VERSION_PLACEHOLDER)' -e '$(subst .,-,$(KCM_VERSION_PLACEHOLDER))' \
+		$(addprefix $(PROVIDER_TEMPLATES_DIR)/,kcm kcm-regional kcm-templates); then \
+		echo "placeholder version $(KCM_VERSION_PLACEHOLDER) is left in the files above after stamping $(VERSION)" >&2; \
+		exit 1; \
+	fi
 
 # TODO: combine all of the bash/sh files into a single one
 .PHONY: templates-generate
@@ -473,8 +484,8 @@ KCM_REPO_URL ?= oci://ghcr.io/k0rdent/kcm/charts
 KCM_REPO_NAME ?= kcm
 
 .PHONY: stable-templates
-stable-templates: yq ## Apply templates from latest stable KCM release.
-	@KUBECTL=$(KUBECTL) YQ=$(YQ) NAMESPACE=$(NAMESPACE) KCM_REPO_NAME=$(KCM_REPO_NAME) KCM_REPO_URL=$(KCM_REPO_URL) KCM_STABLE_VERSION=$(KCM_STABLE_VERSION) $(SHELL) hack/stable-templates.bash
+stable-templates: yq helm ## Apply templates from latest stable KCM release.
+	@KUBECTL=$(KUBECTL) HELM=$(HELM) YQ=$(YQ) NAMESPACE=$(NAMESPACE) KCM_REPO_NAME=$(KCM_REPO_NAME) KCM_REPO_URL=$(KCM_REPO_URL) KCM_STABLE_VERSION=$(KCM_STABLE_VERSION) $(SHELL) hack/stable-templates.bash
 
 .PHONY: dev-release
 dev-release: yq ## Apply release object for current VERSION.
