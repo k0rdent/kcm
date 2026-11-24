@@ -68,6 +68,11 @@ const (
 
 	// defaultInterval is how often helm-controller re-reconciles a release.
 	defaultInterval = 5 * time.Minute
+
+	// defaultConcurrentReconciles matches the --max-concurrent-reconciles
+	// default. It is a fallback: cmd/main.go never populates the config field
+	// the flag writes to, so the reconciler would otherwise run single-worker.
+	defaultConcurrentReconciles = 10
 )
 
 var errUnsupportedServiceType = errors.New("the flux adapter only supports Helm-backed ServiceTemplates")
@@ -270,6 +275,9 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		r.timeFunc = time.Now
 	}
 	r.requeueInterval = 10 * time.Second
+	if r.MaxConcurrentReconciles <= 0 {
+		r.MaxConcurrentReconciles = defaultConcurrentReconciles
+	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.TypedOptions[ctrl.Request]{
