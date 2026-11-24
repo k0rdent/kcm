@@ -479,8 +479,8 @@ KCM_REPO_URL ?= oci://ghcr.io/k0rdent/kcm/charts
 KCM_REPO_NAME ?= kcm
 
 .PHONY: stable-templates
-stable-templates: yq ## Apply templates from latest stable KCM release.
-	@KUBECTL=$(KUBECTL) YQ=$(YQ) NAMESPACE=$(NAMESPACE) KCM_REPO_NAME=$(KCM_REPO_NAME) KCM_REPO_URL=$(KCM_REPO_URL) KCM_STABLE_VERSION=$(KCM_STABLE_VERSION) $(SHELL) hack/stable-templates.bash
+stable-templates: yq helm ## Apply templates from latest stable KCM release.
+	@KUBECTL=$(KUBECTL) HELM=$(HELM) YQ=$(YQ) NAMESPACE=$(NAMESPACE) KCM_REPO_NAME=$(KCM_REPO_NAME) KCM_REPO_URL=$(KCM_REPO_URL) KCM_STABLE_VERSION=$(KCM_STABLE_VERSION) $(SHELL) hack/stable-templates.bash
 
 .PHONY: dev-release
 dev-release: yq ## Apply release object for current VERSION.
