@@ -2,6 +2,8 @@ NAMESPACE ?= kcm-system
 VERSION ?= $(shell git describe --tags --always)
 VERSION := $(patsubst v%,%,$(VERSION))
 FQDN_VERSION = $(subst .,-,$(VERSION))
+# version committed on main; real versions live on release branches and are stamped from the tag at build time
+KCM_VERSION_PLACEHOLDER := 0.0.0-dev
 # Image URL to use all building/pushing image targets
 IMG ?= localhost/kcm/controller:latest
 IMG_REPO = $(shell echo $(IMG) | cut -d: -f1)
