@@ -113,6 +113,10 @@ set-kcm-repo: yq ## Update controller image repositories in values files.
 set-templates-repo: yq ## Update templates repository URL in values files.
 	$(YQ) eval '.controller.templatesRepoURL = "$(REGISTRY_REPO)"' -i $(PROVIDER_TEMPLATES_DIR)/kcm/values.yaml
 
+.PHONY: check-version-placeholder
+check-version-placeholder: yq ## Verify KCM charts and Release carry the placeholder version.
+	@YQ=$(YQ) KCM_VERSION_PLACEHOLDER=$(KCM_VERSION_PLACEHOLDER) PROVIDER_TEMPLATES_DIR=$(PROVIDER_TEMPLATES_DIR) $(SHELL) hack/check-version-placeholder.bash
+
 .PHONY: kcm-chart-release
 kcm-chart-release: set-kcm-version templates-generate ## Generate KCM chart content for publishing.
 
