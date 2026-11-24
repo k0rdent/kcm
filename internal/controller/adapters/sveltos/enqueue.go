@@ -179,6 +179,11 @@ func enqueueClusterSummary(cl client.Client, systemNamespace string) pollerutil.
 				logger.V(1).Info("ServiceSet is being deleted, skipping polling", "service_set", key)
 				continue
 			}
+			if servedByAnotherAdapter(ctx, cl, serviceSet) {
+				// No Profile will ever exist for it; polling one would just
+				// log a not-found every tick.
+				continue
+			}
 			seenThisTick[key] = struct{}{}
 
 			rgnClient, err := resolveRegionalClient(ctx, cl, serviceSet, systemNamespace, rgnClients)
@@ -219,4 +224,16 @@ func enqueueClusterSummary(cl client.Client, systemNamespace string) pollerutil.
 
 		return out, nil
 	}
+}
+
+// servedByAnotherAdapter reports whether the ServiceSet's provider is handled
+// by one of the other built-in adapters sharing this process. An unreadable
+// provider counts as ours, so a transient API error does not silently stop
+// polling a ServiceSet that is in fact ours.
+func servedByAnotherAdapter(ctx context.Context, cl client.Client, serviceSet *kcmv1.ServiceSet) bool {
+	provider := new(kcmv1.StateManagementProvider)
+	if err := cl.Get(ctx, client.ObjectKey{Name: serviceSet.Spec.Provider.Name}, provider); err != nil {
+		return false
+	}
+	return provider.AdapterKind() != kcmv1.AdapterKindSveltos
 }
