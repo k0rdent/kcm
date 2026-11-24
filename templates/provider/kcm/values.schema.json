@@ -74,7 +74,7 @@
           "type": "string"
         },
         "defaultStateManagementProvider": {
-          "description": "Name of the StateManagementProvider a ServiceSet is routed to when it names none; empty means ksm-projectsveltos",
+          "description": "Name of the StateManagementProvider a ServiceSet is routed to when it names none. Empty means ksm-projectsveltos",
           "type": "string"
         },
         "enableFluxCtrl": {
