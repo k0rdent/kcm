@@ -73,6 +73,10 @@
           "description": "Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used",
           "type": "string"
         },
+        "enableFluxCtrl": {
+          "description": "Enables the Flux-backed ServiceSet controller and the ksm-flux StateManagementProvider",
+          "type": "boolean"
+        },
         "enableInPlaceUpdates": {
           "description": "Enables Cluster API in-place updates (experimental) in the cluster-api and k0smotron providers. Might be overridden per provider with the inPlaceUpdates.enabled value. Disabling removes the k0smotron extension webhook, so do it only when no clusters use the InPlace update strategy or are being updated",
           "type": "boolean"

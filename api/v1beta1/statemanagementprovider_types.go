@@ -114,7 +114,25 @@ const (
 
 	// StateManagementProviderSelectorNotDefinedEvent indicates the event for the StateManagementProvider selector not defined
 	StateManagementProviderSelectorNotDefinedEvent = "StateManagementProviderSelectorNotDefined"
+
+	// AdapterKindLabel tells which built-in adapter serves a StateManagementProvider.
+	// Several adapters share the kcm-controller-manager Deployment, so the
+	// adapter reference alone cannot tell them apart.
+	AdapterKindLabel = "ksm.k0rdent.mirantis.com/adapter-kind"
+	// AdapterKindSveltos is the ProjectSveltos-backed adapter; it is the
+	// default for providers that carry no [AdapterKindLabel].
+	AdapterKindSveltos = "sveltos"
+	// AdapterKindFlux is the Flux-backed adapter.
+	AdapterKindFlux = "flux"
 )
+
+// AdapterKind returns the built-in adapter serving this provider.
+func (smp *StateManagementProvider) AdapterKind() string {
+	if kind := smp.Labels[AdapterKindLabel]; kind != "" {
+		return kind
+	}
+	return AdapterKindSveltos
+}
 
 // StateManagementProviderSpec defines the desired state of StateManagementProvider
 type StateManagementProviderSpec struct {

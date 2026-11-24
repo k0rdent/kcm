@@ -155,6 +155,10 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err = r.Get(ctx, client.ObjectKey{Name: serviceSet.Spec.Provider.Name}, smp); err != nil {
 		return ctrl.Result{}, err
 	}
+	if smp.AdapterKind() != kcmv1.AdapterKindSveltos {
+		// Another built-in adapter shares this Deployment and owns this one.
+		return ctrl.Result{}, nil
+	}
 
 	continueReconciliation, err := labelsMatchSelector(serviceSet.Labels, smp.Spec.Selector)
 	if err != nil {
@@ -582,7 +586,8 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return nil, fmt.Errorf("failed to get StateManagementProvider %s: %w", serviceSet.Spec.Provider.Name, err)
 			}
 			if provider.Spec.Adapter.Name != r.AdapterName ||
-				provider.Spec.Adapter.Namespace != r.AdapterNamespace {
+				provider.Spec.Adapter.Namespace != r.AdapterNamespace ||
+				provider.AdapterKind() != kcmv1.AdapterKindSveltos {
 				return nil, nil
 			}
 			return []ctrl.Request{
@@ -598,7 +603,8 @@ func (r *ServiceSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return nil, nil
 			}
 			if provider.Spec.Adapter.Name != r.AdapterName ||
-				provider.Spec.Adapter.Namespace != r.AdapterNamespace {
+				provider.Spec.Adapter.Namespace != r.AdapterNamespace ||
+				provider.AdapterKind() != kcmv1.AdapterKindSveltos {
 				return nil, nil
 			}
 

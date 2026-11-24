@@ -84,6 +84,7 @@ type ManagementReconciler struct {
 	IsDisabledValidationWH              bool // is webhook disabled set via the controller flags
 	EnableInPlaceUpdates                bool // passed to the components
 	EnableInPlaceVersionWithDeleteFirst bool // passed to the components
+	EnableFluxAdapter                   bool // creates the Flux-backed StateManagementProvider
 
 	sveltosDependentControllersStarted bool
 }
@@ -189,6 +190,13 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 	if err := r.ensureStateManagementProvider(ctx, management); err != nil {
 		r.warnf(management, "EnsureStateManagementProviderFailed", "failed to ensure StateManagementProvider is created: %v", err)
 		l.Error(err, "failed to ensure StateManagementProvider is created")
+	}
+
+	if r.EnableFluxAdapter {
+		if err := r.ensureFluxStateManagementProvider(ctx, management); err != nil {
+			r.warnf(management, "EnsureStateManagementProviderFailed", "failed to ensure Flux StateManagementProvider is created: %v", err)
+			l.Error(err, "failed to ensure Flux StateManagementProvider is created")
+		}
 	}
 
 	opts := components.ReconcileComponentsOpts{
@@ -478,6 +486,104 @@ self.status.availableReplicas == self.status.readyReplicas`,
 	}
 
 	err := r.Client.Get(ctx, client.ObjectKeyFromObject(stateManagementProvider), stateManagementProvider)
+	if client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to get %s StateManagementProvider object: %w", stateManagementProvider.GetName(), err)
+	}
+	if err == nil {
+		return nil
+	}
+
+	if err = r.Client.Create(ctx, stateManagementProvider); err != nil {
+		err = fmt.Errorf("failed to create %s StateManagementProvider object: %w", stateManagementProvider.GetName(), err)
+		r.warnf(mgmt, "StateManagementProviderCreateFailed", err.Error())
+		return err
+	}
+
+	l.Info("Successfully created StateManagementProvider object")
+	r.eventf(mgmt, "StateManagementProviderCreated", "Created %s StateManagementProvider object", stateManagementProvider.GetName())
+	return nil
+}
+
+// ensureFluxStateManagementProvider creates the StateManagementProvider served
+// by the built-in Flux adapter. Unlike the sveltos one it is not the default:
+// a ServiceSet reaches it only by naming it in .spec.provider.name.
+func (r *ManagementReconciler) ensureFluxStateManagementProvider(ctx context.Context, mgmt *kcmv1.Management) error {
+	l := ctrl.LoggerFrom(ctx).WithValues("provider_name", kcmv1.AdapterKindFlux)
+
+	l.Info("Ensuring built-in StateManagementProvider for Flux is created")
+	currentNamespace := kubeutil.CurrentNamespace()
+	currentKcmName := os.Getenv("KCM_NAME")
+
+	const (
+		appsAPIGroupVersion = "apps/v1"
+		deploymentKind      = "Deployment"
+
+		helmControllerDeploymentName   = "helm-controller"
+		sourceControllerDeploymentName = "source-controller"
+
+		deploymentReadinessRule = `self.status.availableReplicas == self.status.replicas &&
+self.status.availableReplicas == self.status.updatedReplicas &&
+self.status.availableReplicas == self.status.readyReplicas`
+	)
+
+	stateManagementProvider := &kcmv1.StateManagementProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   kubeutil.FluxStateManagementProvider,
+			Labels: map[string]string{kcmv1.AdapterKindLabel: kcmv1.AdapterKindFlux},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: kcmv1.GroupVersion.String(),
+					Kind:       mgmt.Kind,
+					Name:       mgmt.Name,
+					UID:        mgmt.UID,
+				},
+			},
+		},
+		Spec: kcmv1.StateManagementProviderSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					kubeutil.DefaultStateManagementProviderSelectorKey: kubeutil.FluxStateManagementProviderSelectorValue,
+				},
+			},
+			Adapter: kcmv1.ResourceReference{
+				APIVersion:    appsAPIGroupVersion,
+				Kind:          deploymentKind,
+				Name:          currentKcmName,
+				Namespace:     currentNamespace,
+				ReadinessRule: deploymentReadinessRule,
+			},
+			Provisioner: []kcmv1.ResourceReference{
+				{
+					APIVersion:    appsAPIGroupVersion,
+					Kind:          deploymentKind,
+					Name:          helmControllerDeploymentName,
+					Namespace:     currentNamespace,
+					ReadinessRule: deploymentReadinessRule,
+				},
+				{
+					APIVersion:    appsAPIGroupVersion,
+					Kind:          deploymentKind,
+					Name:          sourceControllerDeploymentName,
+					Namespace:     currentNamespace,
+					ReadinessRule: deploymentReadinessRule,
+				},
+			},
+			ProvisionerCRDs: []kcmv1.ProvisionerCRD{
+				{
+					Group:     helmcontrollerv2.GroupVersion.Group,
+					Version:   helmcontrollerv2.GroupVersion.Version,
+					Resources: []string{"helmreleases"},
+				},
+				{
+					Group:     sourcev1.GroupVersion.Group,
+					Version:   sourcev1.GroupVersion.Version,
+					Resources: []string{"helmcharts", "helmrepositories"},
+				},
+			},
+		},
+	}
+
+	err := r.Client.Get(ctx, client.ObjectKeyFromObject(stateManagementProvider), new(kcmv1.StateManagementProvider))
 	if client.IgnoreNotFound(err) != nil {
 		return fmt.Errorf("failed to get %s StateManagementProvider object: %w", stateManagementProvider.GetName(), err)
 	}

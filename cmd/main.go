@@ -36,6 +36,7 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/build"
 	"github.com/K0rdent/kcm/internal/controller"
+	"github.com/K0rdent/kcm/internal/controller/adapters/flux"
 	"github.com/K0rdent/kcm/internal/controller/adapters/sveltos"
 	"github.com/K0rdent/kcm/internal/controller/ipam"
 	"github.com/K0rdent/kcm/internal/controller/region"
@@ -69,6 +70,7 @@ type config struct {
 	createTemplates                     bool
 	enableSveltosCtrl                   bool
 	enableSveltosExpireCtrl             bool
+	enableFluxCtrl                      bool
 	enableInPlaceUpdates                bool
 	enableInPlaceVersionWithDeleteFirst bool
 	createManagement                    bool
@@ -107,6 +109,7 @@ func main() {
 		leaderElectionNamespace             string
 		enableSveltosCtrl                   bool
 		enableSveltosExpireCtrl             bool
+		enableFluxCtrl                      bool
 		enableInPlaceUpdates                bool
 		enableInPlaceVersionWithDeleteFirst bool
 		defaultHelmTimeout                  time.Duration
@@ -151,6 +154,7 @@ func main() {
 	flag.StringVar(&pprofBindAddress, "pprof-bind-address", "", "The TCP address that the controller should bind to for serving pprof, \"0\" or empty value disables pprof")
 	flag.BoolVar(&enableSveltosCtrl, "enable-sveltos-ctrl", true, "Enable Sveltos built-in provider controller")
 	flag.BoolVar(&enableSveltosExpireCtrl, "enable-sveltos-expire-ctrl", false, "Enable SveltosCluster stuck (expired) tokens controller")
+	flag.BoolVar(&enableFluxCtrl, "enable-flux-ctrl", false, "Enable the Flux built-in state management provider controller")
 	flag.BoolVar(&enableInPlaceUpdates, "enable-in-place-updates", false,
 		"Enable Cluster API in-place updates (experimental), passed as global.enableInPlaceUpdates value to the providers")
 	flag.BoolVar(&enableInPlaceVersionWithDeleteFirst, "enable-in-place-version-with-delete-first", false,
@@ -286,6 +290,7 @@ func main() {
 		kcmTemplatesChartName:               kcmTemplatesChartName,
 		enableSveltosCtrl:                   enableSveltosCtrl,
 		enableSveltosExpireCtrl:             enableSveltosExpireCtrl,
+		enableFluxCtrl:                      enableFluxCtrl,
 		enableInPlaceUpdates:                enableInPlaceUpdates,
 		enableInPlaceVersionWithDeleteFirst: enableInPlaceVersionWithDeleteFirst,
 		defaultHelmTimeout:                  defaultHelmTimeout,
@@ -381,6 +386,7 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		CAPIClusterPollInterval:             cfg.capiClusterPollInterval,
 		EnableInPlaceUpdates:                cfg.enableInPlaceUpdates,
 		EnableInPlaceVersionWithDeleteFirst: cfg.enableInPlaceVersionWithDeleteFirst,
+		EnableFluxAdapter:                   cfg.enableFluxCtrl,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		return err
@@ -494,6 +500,20 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 			return err
 		}
 		setupLog.Info("setup for ServiceSet controller successful")
+	}
+
+	if cfg.enableFluxCtrl {
+		setupLog.Info("setting up built-in Flux ServiceSet controller")
+		if err = (&flux.ServiceSetReconciler{
+			SystemNamespace:         currentNamespace,
+			AdapterName:             os.Getenv("KCM_NAME"),
+			AdapterNamespace:        currentNamespace,
+			MaxConcurrentReconciles: cfg.maxConcurrentReconciles,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "ServiceSet")
+			return err
+		}
+		setupLog.Info("setup for Flux ServiceSet controller successful")
 	}
 
 	if cfg.enableSveltosExpireCtrl {

@@ -29,9 +29,13 @@ import (
 const (
 	DefaultSystemNamespace         = "kcm-system"
 	DefaultStateManagementProvider = "ksm-projectsveltos"
+	// FluxStateManagementProvider is the name of the Flux-backed provider. It is
+	// opt-in: a ServiceSet reaches it only by naming it in .spec.provider.name.
+	FluxStateManagementProvider = "ksm-flux"
 
 	DefaultStateManagementProviderSelectorKey   = "ksm.k0rdent.mirantis.com/adapter"
 	DefaultStateManagementProviderSelectorValue = "kcm-controller-manager"
+	FluxStateManagementProviderSelectorValue    = "kcm-controller-manager-flux"
 )
 
 func EnsureDeleteAllOf(ctx context.Context, cl client.Client, gvk schema.GroupVersionKind, opts *client.ListOptions) (requeue bool, err error) {
