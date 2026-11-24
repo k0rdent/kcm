@@ -380,19 +380,6 @@ func (r *ServiceSetReconciler) ensureHelmReleases(ctx context.Context, serviceSe
 			return err
 		}
 		wanted[name] = struct{}{}
-
-		if !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
-			return s.Name == svc.Name && s.Namespace == svc.Namespace
-		}) {
-			serviceSet.Status.Services = append(serviceSet.Status.Services, kcmv1.ServiceState{
-				LastStateTransitionTime: new(metav1.NewTime(r.timeFunc())),
-				Type:                    kcmv1.ServiceTypeHelm,
-				Name:                    svc.Name,
-				Namespace:               svc.Namespace,
-				Template:                svc.Template,
-				State:                   kcmv1.ServiceStateProvisioning,
-			})
-		}
 	}
 
 	// Drop the releases of services that were removed from the spec.
@@ -540,33 +527,44 @@ func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, servi
 		}] = hr
 	}
 
-	states := make([]kcmv1.ServiceState, 0, len(serviceSet.Status.Services))
+	previous := make(map[client.ObjectKey]kcmv1.ServiceState, len(serviceSet.Status.Services))
 	for _, state := range serviceSet.Status.Services {
+		previous[client.ObjectKey{Namespace: state.Namespace, Name: state.Name}] = state
+	}
+
+	// Built from the spec, not from the previous status: a service dropped from
+	// the spec has to leave the status with it, or the ServiceSet never counts
+	// as deployed again.
+	states := make([]kcmv1.ServiceState, 0, len(serviceSet.Spec.Services))
+	for _, svc := range serviceSet.Spec.Services {
+		key := client.ObjectKey{Namespace: svc.Namespace, Name: svc.Name}
+		state := previous[key]
 		newState := *state.DeepCopy()
-		hr, found := byService[client.ObjectKey{Namespace: state.Namespace, Name: state.Name}]
-		switch {
-		case !found:
-			// Either the release has not been created yet or the service was
-			// uninstalled on purpose; both read as "nothing deployed".
-			newState.State = kcmv1.ServiceStateNotDeployed
-			newState.FailureMessage = ""
-		default:
+		newState.Name, newState.Namespace, newState.Template = svc.Name, svc.Namespace, svc.Template
+		newState.Type = kcmv1.ServiceTypeHelm
+
+		if hr, found := byService[key]; found {
 			newState.State, newState.FailureMessage = serviceStateFromHelmRelease(hr)
 			if version := deployedChartVersion(hr); version != "" {
 				newState.Version = version
 			}
+		} else {
+			// Either the release has not been created yet or the service was
+			// uninstalled on purpose; both read as "nothing deployed".
+			newState.State = kcmv1.ServiceStateNotDeployed
+			newState.FailureMessage = ""
 		}
-		if newState.State != state.State {
+
+		if newState.State != state.State || newState.LastStateTransitionTime == nil {
 			newState.LastStateTransitionTime = new(metav1.NewTime(r.timeFunc()))
 		}
 		states = append(states, newState)
 	}
 	serviceSet.Status.Services = states
 
-	serviceSet.Status.Deployed = len(serviceSet.Status.Services) == len(serviceSet.Spec.Services) &&
-		!slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
-			return s.State != kcmv1.ServiceStateDeployed
-		})
+	serviceSet.Status.Deployed = !slices.ContainsFunc(serviceSet.Status.Services, func(s kcmv1.ServiceState) bool {
+		return s.State != kcmv1.ServiceStateDeployed
+	})
 
 	r.updateServicesInReadyStateCondition(serviceSet)
 
