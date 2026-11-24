@@ -69,6 +69,11 @@ const (
 	// defaultInterval is how often helm-controller re-reconciles a release.
 	defaultInterval = 5 * time.Minute
 
+	// nudgeInterval is how often a HelmRelease stuck mid-uninstall is asked to
+	// reconcile again. Short enough to keep a teardown moving, long enough not
+	// to patch the same object on every requeue.
+	nudgeInterval = 30 * time.Second
+
 	// defaultConcurrentReconciles matches the --max-concurrent-reconciles
 	// default. It is a fallback: cmd/main.go never populates the config field
 	// the flag writes to, so the reconciler would otherwise run single-worker.
@@ -246,13 +251,17 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, serviceSet *
 	}
 
 	if len(releases) > 0 {
-		for _, hr := range releases {
-			if !hr.DeletionTimestamp.IsZero() {
+		for i := range releases {
+			hr := &releases[i]
+			if hr.DeletionTimestamp.IsZero() {
+				l.Info("Deleting HelmRelease", "helmrelease", client.ObjectKeyFromObject(hr))
+				if err := r.Delete(ctx, hr); client.IgnoreNotFound(err) != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to delete HelmRelease %s: %w", client.ObjectKeyFromObject(hr), err)
+				}
 				continue
 			}
-			l.Info("Deleting HelmRelease", "helmrelease", client.ObjectKeyFromObject(&hr))
-			if err := r.Delete(ctx, &hr); client.IgnoreNotFound(err) != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to delete HelmRelease %s: %w", client.ObjectKeyFromObject(&hr), err)
+			if err := r.nudgeStalledUninstall(ctx, hr); err != nil {
+				return ctrl.Result{}, err
 			}
 		}
 		l.V(1).Info("Waiting for HelmReleases to be deleted", "count", len(releases))
@@ -411,6 +420,30 @@ func (r *ServiceSetReconciler) ensureHelmReleases(ctx context.Context, serviceSe
 	status = metav1.ConditionTrue
 	reason = kcmv1.ServiceSetProfileReadyReason
 	message = kcmv1.ServiceSetProfileReadyMessage
+	return nil
+}
+
+// nudgeStalledUninstall asks helm-controller to reconcile a HelmRelease that
+// has been marked for deletion but is still sitting there. helm-controller does
+// not always act on the deletion itself, and its next scheduled reconcile is
+// spec.interval away -- minutes during which the ServiceSet, and the
+// MultiClusterService above it, cannot finish deleting. A reconcile request is
+// a watch event it cannot miss.
+func (r *ServiceSetReconciler) nudgeStalledUninstall(ctx context.Context, hr *helmcontrollerv2.HelmRelease) error {
+	now := r.timeFunc()
+	if requested, err := time.Parse(time.RFC3339Nano, hr.Annotations[fluxmeta.ReconcileRequestAnnotation]); err == nil &&
+		now.Sub(requested) < nudgeInterval {
+		return nil
+	}
+
+	patch := client.MergeFrom(hr.DeepCopy())
+	if hr.Annotations == nil {
+		hr.Annotations = make(map[string]string, 1)
+	}
+	hr.Annotations[fluxmeta.ReconcileRequestAnnotation] = now.Format(time.RFC3339Nano)
+	if err := r.Patch(ctx, hr, patch); client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to request reconcile of HelmRelease %s: %w", client.ObjectKeyFromObject(hr), err)
+	}
 	return nil
 }
 
@@ -616,16 +649,33 @@ func serviceStateFromHelmRelease(hr *helmcontrollerv2.HelmRelease) (state, failu
 	}
 
 	ready := apimeta.FindStatusCondition(hr.Status.Conditions, fluxmeta.ReadyCondition)
-	switch {
-	case ready == nil:
-		return kcmv1.ServiceStateProvisioning, ""
-	case ready.Status == metav1.ConditionTrue:
+	if ready != nil && ready.Status == metav1.ConditionTrue {
 		return kcmv1.ServiceStateDeployed, ""
-	case ready.Status == metav1.ConditionFalse && isTerminalFailureReason(ready.Reason):
-		return kcmv1.ServiceStateFailed, ready.Message
-	default:
-		return kcmv1.ServiceStateProvisioning, ""
 	}
+
+	// An atomic upgrade that was rolled back leaves Ready false with a reason
+	// about the remediation rather than the failure. Without this the service
+	// would sit in Provisioning forever, retried every interval.
+	if remediated := apimeta.FindStatusCondition(hr.Status.Conditions, helmcontrollerv2.RemediatedCondition); remediated != nil &&
+		remediated.Status == metav1.ConditionTrue {
+		return kcmv1.ServiceStateFailed, releaseFailureMessage(hr, remediated)
+	}
+
+	if ready != nil && ready.Status == metav1.ConditionFalse && isTerminalFailureReason(ready.Reason) {
+		return kcmv1.ServiceStateFailed, ready.Message
+	}
+
+	return kcmv1.ServiceStateProvisioning, ""
+}
+
+// releaseFailureMessage prefers what the release attempt said over what the
+// remediation did: "Helm rollback succeeded" is not why the service failed.
+func releaseFailureMessage(hr *helmcontrollerv2.HelmRelease, fallback *metav1.Condition) string {
+	if released := apimeta.FindStatusCondition(hr.Status.Conditions, helmcontrollerv2.ReleasedCondition); released != nil &&
+		released.Status == metav1.ConditionFalse {
+		return released.Message
+	}
+	return fallback.Message
 }
 
 // isTerminalFailureReason reports whether a not-ready reason describes an

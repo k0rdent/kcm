@@ -153,6 +153,28 @@ func TestServiceStateFromHelmRelease(t *testing.T) {
 			wantState: kcmv1.ServiceStateProvisioning,
 		},
 		{
+			// An atomic upgrade that was rolled back: Ready carries the
+			// remediation, not the failure, so the message has to come from
+			// Released or the service reads as healthy-ish forever.
+			name: "remediated after a failed upgrade",
+			conditions: []metav1.Condition{
+				{Type: fluxmeta.ReadyCondition, Status: metav1.ConditionFalse, Reason: "RollbackSucceeded", Message: "Helm rollback succeeded"},
+				{Type: helmcontrollerv2.ReleasedCondition, Status: metav1.ConditionFalse, Reason: helmcontrollerv2.UpgradeFailedReason, Message: "replicas: Invalid value: -1"},
+				{Type: helmcontrollerv2.RemediatedCondition, Status: metav1.ConditionTrue, Reason: helmcontrollerv2.RollbackSucceededReason, Message: "Helm rollback succeeded"},
+			},
+			wantState: kcmv1.ServiceStateFailed,
+			wantMsg:   "replicas: Invalid value: -1",
+		},
+		{
+			// A later successful release clears the failure: Ready wins.
+			name: "ready again after a remediation",
+			conditions: []metav1.Condition{
+				{Type: fluxmeta.ReadyCondition, Status: metav1.ConditionTrue, Reason: helmcontrollerv2.UpgradeSucceededReason},
+				{Type: helmcontrollerv2.RemediatedCondition, Status: metav1.ConditionTrue, Message: "Helm rollback succeeded"},
+			},
+			wantState: kcmv1.ServiceStateDeployed,
+		},
+		{
 			name: "stalled wins over ready",
 			conditions: []metav1.Condition{
 				{Type: fluxmeta.ReadyCondition, Status: metav1.ConditionTrue},
