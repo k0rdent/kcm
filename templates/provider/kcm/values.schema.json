@@ -73,6 +73,10 @@
           "description": "Specifies the timeout duration for Helm install or upgrade operations. If unset, Flux’s default value will be used",
           "type": "string"
         },
+        "defaultStateManagementProvider": {
+          "description": "Name of the StateManagementProvider a ServiceSet is routed to when it names none; empty means ksm-projectsveltos",
+          "type": "string"
+        },
         "enableFluxCtrl": {
           "description": "Enables the Flux-backed ServiceSet controller and the ksm-flux StateManagementProvider",
           "type": "boolean"

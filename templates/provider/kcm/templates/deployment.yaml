@@ -87,6 +87,10 @@ spec:
           value: {{ .Release.Name | quote }}
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ quote .Values.kubernetesClusterDomain }}
+        {{- if .Values.controller.defaultStateManagementProvider }}
+        - name: KCM_DEFAULT_STATE_MANAGEMENT_PROVIDER
+          value: {{ .Values.controller.defaultStateManagementProvider | quote }}
+        {{- end }}
         {{- if and .Values.proxy .Values.proxy.secretName }}
         - name: PROXY_SECRET
           value: {{ .Values.proxy.secretName | quote }}
