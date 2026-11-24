@@ -119,6 +119,11 @@ check-version-placeholder: yq ## Verify KCM charts and Release carry the placeho
 
 .PHONY: kcm-chart-release
 kcm-chart-release: set-kcm-version templates-generate ## Generate KCM chart content for publishing.
+	@if grep -rlF --exclude=Chart.lock --exclude-dir=charts -e '$(KCM_VERSION_PLACEHOLDER)' -e '$(subst .,-,$(KCM_VERSION_PLACEHOLDER))' \
+		$(addprefix $(PROVIDER_TEMPLATES_DIR)/,kcm kcm-regional kcm-templates); then \
+		echo "placeholder version $(KCM_VERSION_PLACEHOLDER) is left in the files above after stamping $(VERSION)" >&2; \
+		exit 1; \
+	fi
 
 # TODO: combine all of the bash/sh files into a single one
 .PHONY: templates-generate
