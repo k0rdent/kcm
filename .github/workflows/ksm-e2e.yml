@@ -62,16 +62,24 @@ concurrency:
 
 jobs:
   ksm:
-    name: KSM
-    # Pinned, not floating: the scenarios live in another repository, and on main
-    # a change there would turn this red with nothing in this repository to
-    # explain it. Bumping the tag is a pull request like any other.
-    uses: k0rdent/ksm-tests/.github/workflows/e2e.yml@v1.4.0
+    name: KSM (${{ matrix.provider }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # The same scenarios through both built-in adapters: the Flux one is
+        # what this branch adds, the Sveltos one is what must not regress.
+        provider: [ksm-projectsveltos, ksm-flux]
+    # WIP: the fork branch, not the pinned tag -- the Flux adapter needs the
+    # KSM_PROVIDER plumbing that only exists there. Back to k0rdent/ksm-tests
+    # at a tag before this is proposed upstream.
+    uses: josef-hak/ksm-tests/.github/workflows/e2e.yml@flux
     with:
       # The same ref as the uses: line above. A called workflow cannot discover
       # the ref it was reached at -- no context exposes it -- so it has to be
       # told, or it checks this repository out in place of its own.
-      ksm_ref: v1.4.0
+      ksm_ref: flux
+      ksm_repo: josef-hak/ksm-tests
+      KSM_PROVIDER: ${{ matrix.provider }}
       # The head commit, not the ref: a branch moves, and the run should say
       # exactly what it tested. head.repo is the fork on a fork pull request,
       # and the caller's own repository for a manual run.
