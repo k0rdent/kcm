@@ -749,18 +749,16 @@ func buildHelmRelease(
 	}
 
 	hr := &helmcontrollerv2.HelmRelease{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: serviceSet.Namespace,
-			Labels: map[string]string{
-				// Both Flux controllers are started with
-				// --watch-label-selector=k0rdent.mirantis.com/managed=true.
-				kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
-				serviceSetNameLabel:      serviceSet.Name,
-				serviceSetNamespaceLabel: serviceSet.Namespace,
-				serviceNameLabel:         svc.Name,
-				serviceNamespaceLabel:    svc.Namespace,
-			},
+		Name:      name,
+		Namespace: serviceSet.Namespace,
+		Labels: map[string]string{
+			// Both Flux controllers are started with
+			// --watch-label-selector=k0rdent.mirantis.com/managed=true.
+			kcmv1.KCMManagedLabelKey: kcmv1.KCMManagedLabelValue,
+			serviceSetNameLabel:      serviceSet.Name,
+			serviceSetNamespaceLabel: serviceSet.Namespace,
+			serviceNameLabel:         svc.Name,
+			serviceNamespaceLabel:    svc.Namespace,
 		},
 		Spec: helmcontrollerv2.HelmReleaseSpec{
 			Interval:           interval,

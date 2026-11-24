@@ -527,16 +527,14 @@ self.status.availableReplicas == self.status.readyReplicas`
 	)
 
 	stateManagementProvider := &kcmv1.StateManagementProvider{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   kubeutil.FluxStateManagementProvider,
-			Labels: map[string]string{kcmv1.AdapterKindLabel: kcmv1.AdapterKindFlux},
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: kcmv1.GroupVersion.String(),
-					Kind:       mgmt.Kind,
-					Name:       mgmt.Name,
-					UID:        mgmt.UID,
-				},
+		Name:   kubeutil.FluxStateManagementProvider,
+		Labels: map[string]string{kcmv1.AdapterKindLabel: kcmv1.AdapterKindFlux},
+		OwnerReferences: []metav1.OwnerReference{
+			{
+				APIVersion: kcmv1.GroupVersion.String(),
+				Kind:       mgmt.Kind,
+				Name:       mgmt.Name,
+				UID:        mgmt.UID,
 			},
 		},
 		Spec: kcmv1.StateManagementProviderSpec{

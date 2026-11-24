@@ -30,7 +30,7 @@ import (
 
 func helmTemplate() *kcmv1.ServiceTemplate {
 	return &kcmv1.ServiceTemplate{
-		ObjectMeta: metav1.ObjectMeta{Name: "ingress-nginx", Namespace: "kcm-system"},
+		Name: "ingress-nginx", Namespace: "kcm-system",
 		Spec: kcmv1.ServiceTemplateSpec{
 			Helm: &kcmv1.HelmSpec{ChartSpec: &sourcev1.HelmChartSpec{Chart: "ingress-nginx", Version: "4.11.0"}},
 		},
@@ -48,7 +48,7 @@ func helmTemplate() *kcmv1.ServiceTemplate {
 
 func TestBuildHelmRelease(t *testing.T) {
 	serviceSet := &kcmv1.ServiceSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster-mcs", Namespace: "kcm-system"},
+		Name: "cluster-mcs", Namespace: "kcm-system",
 	}
 	svc := kcmv1.ServiceWithValues{
 		Name:      "ingress-nginx",
@@ -88,11 +88,9 @@ func TestBuildHelmRelease(t *testing.T) {
 // only thing that keeps a release from being reconciled behind our back.
 func TestBuildHelmReleaseSuspendsOnPause(t *testing.T) {
 	serviceSet := &kcmv1.ServiceSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        "cluster-mcs",
-			Namespace:   "kcm-system",
-			Annotations: map[string]string{kcmv1.ServiceSetPausedAnnotation: "true"},
-		},
+		Name:        "cluster-mcs",
+		Namespace:   "kcm-system",
+		Annotations: map[string]string{kcmv1.ServiceSetPausedAnnotation: "true"},
 	}
 	svc := kcmv1.ServiceWithValues{Name: "svc", Namespace: "ns", Template: "ingress-nginx"}
 
@@ -102,7 +100,7 @@ func TestBuildHelmReleaseSuspendsOnPause(t *testing.T) {
 }
 
 func TestBuildHelmReleaseProviderConfig(t *testing.T) {
-	serviceSet := &kcmv1.ServiceSet{ObjectMeta: metav1.ObjectMeta{Name: "set", Namespace: "kcm-system"}}
+	serviceSet := &kcmv1.ServiceSet{Name: "set", Namespace: "kcm-system"}
 	svc := kcmv1.ServiceWithValues{Name: "svc", Namespace: "ns", Template: "ingress-nginx"}
 
 	cfg, err := providerConfigFromJSON(&apiextv1.JSON{
@@ -194,7 +192,7 @@ func TestServiceStateFromHelmRelease(t *testing.T) {
 }
 
 func TestHelmReleaseNameIsBounded(t *testing.T) {
-	serviceSet := &kcmv1.ServiceSet{ObjectMeta: metav1.ObjectMeta{Name: longString(200)}}
+	serviceSet := &kcmv1.ServiceSet{Name: longString(200)}
 	svc := kcmv1.ServiceWithValues{Name: longString(200), Namespace: longString(200)}
 	name := helmReleaseName(serviceSet, svc)
 	require.LessOrEqual(t, len(name), 253)
