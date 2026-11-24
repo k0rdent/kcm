@@ -472,6 +472,8 @@ func (r *ServiceSetReconciler) ownedHelmReleases(ctx context.Context, serviceSet
 
 // kubeConfigReference returns the kubeconfig Flux must use to reach the
 // cluster the services are deployed to, or nil for the management cluster.
+//
+//nolint:nilnil // a nil reference is the answer: it means the management cluster
 func (r *ServiceSetReconciler) kubeConfigReference(ctx context.Context, serviceSet *kcmv1.ServiceSet) (*fluxmeta.KubeConfigReference, error) {
 	if serviceSet.Spec.Provider.SelfManagement || serviceSet.Spec.Cluster == "" {
 		return nil, nil
@@ -882,6 +884,7 @@ func valuesReferences(src []kcmv1.ValuesFrom) []helmcontrollerv2.ValuesReference
 	return refs
 }
 
+//nolint:nilnil // a nil value is the answer: the service passes no values
 func valuesFromYAML(values string) (*apiextv1.JSON, error) {
 	if strings.TrimSpace(values) == "" {
 		return nil, nil
