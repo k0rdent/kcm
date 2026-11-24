@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -86,7 +87,7 @@ type ManagementReconciler struct {
 	EnableInPlaceVersionWithDeleteFirst bool // passed to the components
 	EnableFluxAdapter                   bool // creates the Flux-backed StateManagementProvider
 
-	sveltosDependentControllersStarted bool
+	dependentControllersStarted bool
 }
 
 const cldRegSecretName string = "cld-registry-credentials"
@@ -313,17 +314,29 @@ func (r *ManagementReconciler) validateManagement(ctx context.Context, managemen
 // startDependentControllers starts controllers that cannot be started
 // at process startup because of some dependency like CRDs being present.
 func (r *ManagementReconciler) startDependentControllers(ctx context.Context, management *kcmv1.Management) (requeue bool, err error) {
-	if r.sveltosDependentControllersStarted {
+	if r.dependentControllersStarted {
 		// Only need to start controllers once.
+		return false, nil
+	}
+
+	if r.Manager == nil {
+		// Reconcile was called on a reconciler SetupWithManager never wired up,
+		// so there is no manager to attach the controllers below to. Only
+		// reachable from a test that drives Reconcile directly.
 		return false, nil
 	}
 
 	l := ctrl.LoggerFrom(ctx).WithValues("provider_name", kcmv1.ProviderSveltosName)
 
-	// WARN: FIXME: (ksm) if sveltos is an optional provider,
-	// absence of it means we will not have both the CLD and MCS controllers at all
-
-	if !management.Status.Components[kcmv1.ProviderSveltosName].Success {
+	// Sveltos is one state management provider among others now, so a
+	// Management that does not enable it has nothing to wait for here -- the
+	// two controllers below reach no sveltos API themselves. Keyed on the
+	// spec, not on the status: the component status is empty on the first
+	// reconcile of a Management that does enable sveltos.
+	sveltosEnabled := slices.ContainsFunc(management.Spec.Providers, func(p kcmv1.Provider) bool {
+		return p.Name == kcmv1.ProviderSveltosName
+	})
+	if sveltosEnabled && !management.Status.Components[kcmv1.ProviderSveltosName].Success {
 		msg := "Waiting for provider to be ready to setup controllers dependent on it"
 		r.eventf(management, "WaitingForSveltosReadiness", msg)
 		l.Info(msg)
@@ -351,7 +364,7 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 	}).SetupWithManager(r.Manager); err != nil {
 		return false, fmt.Errorf("failed to setup controller for ClusterDeployment: %w", err)
 	}
-	r.eventf(management, "ClusterDeploymentControllerEnabled", "Sveltos is ready. Enabling ClusterDeployment controller")
+	r.eventf(management, "ClusterDeploymentControllerEnabled", "Dependencies are ready. Enabling ClusterDeployment controller")
 	l.Info("Setup for ClusterDeployment controller successful")
 
 	l.Info("Provider has been successfully installed, so setting up controller for MultiClusterService")
@@ -361,10 +374,10 @@ func (r *ManagementReconciler) startDependentControllers(ctx context.Context, ma
 	}).SetupWithManager(r.Manager); err != nil {
 		return false, fmt.Errorf("failed to setup controller for MultiClusterService: %w", err)
 	}
-	r.eventf(management, "MultiClusterServiceControllerEnabled", "Sveltos is ready. Enabling MultiClusterService controller")
+	r.eventf(management, "MultiClusterServiceControllerEnabled", "Dependencies are ready. Enabling MultiClusterService controller")
 	l.Info("Setup for MultiClusterService controller successful")
 
-	r.sveltosDependentControllersStarted = true
+	r.dependentControllersStarted = true
 	return false, nil
 }
 
