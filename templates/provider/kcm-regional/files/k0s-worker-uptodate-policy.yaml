@@ -1,0 +1,129 @@
+# =============================================================================
+# TODO(KLUDGE): DELETE THIS FILE once Cluster API reports k0s workers as up to
+# date by itself. Track https://github.com/kubernetes-sigs/cluster-api/issues/14086
+#
+# This is a temporary, KCM-only kludge, NOT a mechanism supported or
+# recommended by the Cluster API community. It rewrites a status condition
+# that Cluster API owns. Delete together with it:
+# - templates/provider/kcm-regional/templates/k0s-worker-uptodate-policy.yaml
+# - templates/provider/kcm-regional/tests/k0s_worker_uptodate_policy_test.yaml
+# - the k0sWorkerUpToDatePolicy value in templates/provider/kcm-regional/values.yaml
+# - internal/controller/clusterdeployment_k0s_uptodate.go and its test
+# - the machines/status and mutatingadmissionpolicies rules in
+#   templates/provider/kcm/templates/rbac/controller/roles.yaml
+# - test/admissionpolicy/k0s_worker_uptodate_test.go
+# KEEP the e2e validation "workers-uptodate" in
+# test/e2e/clusterdeployment/providervalidator.go: it guards against a
+# regression once the kludge is gone.
+# =============================================================================
+#
+# Since v1.14.0 Cluster API marks a MachineDeployment worker UpToDate=False
+# (reason Updating) when Node.status.nodeInfo.kubeletVersion differs from
+# Machine.spec.version as a raw string. The k0s kubelet always reports
+# vX.Y.Z+k0s, so workers asking for vX.Y.Z+k0s.N (or a bare vX.Y.Z) never
+# become UpToDate, and MachineSets, MachineDeployments and the Cluster keep
+# reporting a rollout that never ends.
+#
+# This policy corrects the condition on Machine status writes when the only
+# difference is the k0s build: same vX.Y.Z, no in-place update in progress.
+# A real Kubernetes version mismatch, template drift or an in-place update keep
+# Cluster API's verdict.
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: kcm-k0s-worker-uptodate
+spec:
+  failurePolicy: Ignore
+  reinvocationPolicy: Never
+  matchConstraints:
+    matchPolicy: Equivalent
+    resourceRules:
+      - apiGroups: ["cluster.x-k8s.io"]
+        apiVersions: ["v1beta2"]
+        operations: ["UPDATE"]
+        resources: ["machines/status"]
+  matchConditions:
+    - name: md-worker
+      expression: >-
+        has(object.metadata.labels) &&
+        'cluster.x-k8s.io/deployment-name' in object.metadata.labels
+    - name: k0s-bootstrap
+      expression: >-
+        has(object.spec.bootstrap.configRef) &&
+        object.spec.bootstrap.configRef.kind == 'K0sWorkerConfig'
+    - name: no-inplace-update
+      expression: >-
+        !has(object.metadata.annotations) ||
+        (!('in-place-updates.internal.cluster.x-k8s.io/update-in-progress' in object.metadata.annotations) &&
+         !('runtime.cluster.x-k8s.io/pending-hooks' in object.metadata.annotations &&
+           object.metadata.annotations['runtime.cluster.x-k8s.io/pending-hooks'].contains('UpdateMachine')))
+    - name: versions-present
+      expression: >-
+        has(object.spec.version) && has(object.status.nodeInfo) &&
+        has(object.status.nodeInfo.kubeletVersion) && has(object.status.conditions)
+    - name: uptodate-false-updating
+      expression: >-
+        object.status.conditions.exists(c, c.type == 'UpToDate' && c.status == 'False' && c.reason == 'Updating')
+    - name: not-updating
+      expression: >-
+        !object.status.conditions.exists(c, c.type == 'Updating' && c.status == 'True')
+  variables:
+    # capi >= 1.14.5 compares status.version (defaults to the kubelet version), older ones the kubelet version
+    - name: observed
+      expression: >-
+        has(object.status.version) && object.status.version != '' ? object.status.version : object.status.nodeInfo.kubeletVersion
+    - name: core
+      expression: >-
+        variables.observed.endsWith('+k0s') ? variables.observed.substring(0, size(variables.observed) - 4) : ''
+    # spec matches the kubelet modulo the k0s build number: vX.Y.Z, vX.Y.Z+k0s or vX.Y.Z+k0s.N
+    - name: equivalent
+      expression: >-
+        variables.core != '' &&
+        variables.core.matches('^v[0-9]+[.][0-9]+[.][0-9]+$') &&
+        (object.spec.version == variables.core ||
+         object.spec.version == variables.observed ||
+         (object.spec.version.startsWith(variables.observed + '.') &&
+          object.spec.version.substring(size(variables.observed) + 1).matches('^[0-9]+$')))
+    - name: idx
+      expression: >-
+        object.status.conditions.map(c, c.type).indexOf('UpToDate')
+    # keep the stored transition time once corrected, so repeated capi writes are no-ops;
+    # the first correction inherits the time capi set the condition to False, cel cannot read the clock
+    - name: oldUpToDate
+      expression: >-
+        oldObject != null && has(oldObject.status) && has(oldObject.status.conditions) &&
+        oldObject.status.conditions.exists(c, c.type == 'UpToDate' && c.status == 'True')
+    - name: ltt
+      expression: >-
+        variables.oldUpToDate ?
+          oldObject.status.conditions.filter(c, c.type == 'UpToDate')[0].lastTransitionTime :
+          object.status.conditions[variables.idx].lastTransitionTime
+    - name: og
+      expression: >-
+        has(object.status.conditions[variables.idx].observedGeneration) ?
+          object.status.conditions[variables.idx].observedGeneration : object.metadata.generation
+  mutations:
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: >-
+          !variables.equivalent ? [] : [
+            JSONPatch{
+              op: "replace",
+              path: "/status/conditions/" + string(variables.idx),
+              value: {
+                "type": dyn("UpToDate"),
+                "status": dyn("True"),
+                "reason": dyn("UpToDate"),
+                "message": dyn(""),
+                "observedGeneration": dyn(variables.og),
+                "lastTransitionTime": dyn(variables.ltt)
+              }
+            }
+          ]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: kcm-k0s-worker-uptodate
+spec:
+  policyName: kcm-k0s-worker-uptodate

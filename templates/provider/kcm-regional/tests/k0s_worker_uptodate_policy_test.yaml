@@ -1,0 +1,52 @@
+# TODO(KLUDGE): DELETE THIS FILE together with the k0s worker UpToDate kludge once
+# https://github.com/kubernetes-sigs/cluster-api/issues/14086 is fixed.
+suite: k0s worker UpToDate policy rendering
+templates:
+  - templates/k0s-worker-uptodate-policy.yaml
+
+tests:
+  - it: "MutatingAdmissionPolicy v1 served -> renders the policy and its binding"
+    capabilities:
+      apiVersions:
+        - admissionregistration.k8s.io/v1/MutatingAdmissionPolicy
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: MutatingAdmissionPolicy
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: kcm-k0s-worker-uptodate
+        documentIndex: 0
+      - equal:
+          path: spec.failurePolicy
+          value: Ignore
+        documentIndex: 0
+      - equal:
+          path: spec.matchConstraints.resourceRules[0].resources
+          value:
+            - machines/status
+        documentIndex: 0
+      - isKind:
+          of: MutatingAdmissionPolicyBinding
+        documentIndex: 1
+      - equal:
+          path: spec.policyName
+          value: kcm-k0s-worker-uptodate
+        documentIndex: 1
+
+  - it: "MutatingAdmissionPolicy v1 not served -> renders nothing"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: "disabled -> renders nothing even when served"
+    set:
+      k0sWorkerUpToDatePolicy.enabled: false
+    capabilities:
+      apiVersions:
+        - admissionregistration.k8s.io/v1/MutatingAdmissionPolicy
+    asserts:
+      - hasDocuments:
+          count: 0

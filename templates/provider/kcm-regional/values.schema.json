@@ -65,6 +65,17 @@
     "imagePullSecrets": {
       "type": "array"
     },
+    "k0sWorkerUpToDatePolicy": {
+      "description": "TEMPORARY KLUDGE, to be removed once https://github.com/kubernetes-sigs/cluster-api/issues/14086 is fixed. Works around Cluster API reporting k0s workers as not up to date forever because their kubelet version lacks the k0s build number",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Installs a MutatingAdmissionPolicy that reports k0s MachineDeployment workers up to date when their kubelet differs from the requested version only by the k0s build. Rendered only on clusters serving admissionregistration.k8s.io/v1 MutatingAdmissionPolicy (Kubernetes 1.36+)",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
     "nameOverride": {
       "type": "string"
     },
