@@ -33,9 +33,11 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	argocdv1 "github.com/K0rdent/kcm/api/argocd/v1alpha1"
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/build"
 	"github.com/K0rdent/kcm/internal/controller"
+	"github.com/K0rdent/kcm/internal/controller/adapters/argocd"
 	"github.com/K0rdent/kcm/internal/controller/adapters/flux"
 	"github.com/K0rdent/kcm/internal/controller/adapters/sveltos"
 	"github.com/K0rdent/kcm/internal/controller/ipam"
@@ -60,6 +62,7 @@ type config struct {
 	globalK0sURL                        string
 	k0sURLCertSecretName                string
 	templatesRepoURL                    string
+	argocdNamespace                     string
 	defaultHelmTimeout                  time.Duration
 	capiClusterPollInterval             time.Duration
 	maxConcurrentReconciles             int
@@ -71,6 +74,7 @@ type config struct {
 	enableSveltosCtrl                   bool
 	enableSveltosExpireCtrl             bool
 	enableFluxCtrl                      bool
+	enableArgoCDCtrl                    bool
 	enableInPlaceUpdates                bool
 	enableInPlaceVersionWithDeleteFirst bool
 	createManagement                    bool
@@ -110,6 +114,8 @@ func main() {
 		enableSveltosCtrl                   bool
 		enableSveltosExpireCtrl             bool
 		enableFluxCtrl                      bool
+		enableArgoCDCtrl                    bool
+		argocdNamespace                     string
 		enableInPlaceUpdates                bool
 		enableInPlaceVersionWithDeleteFirst bool
 		defaultHelmTimeout                  time.Duration
@@ -155,6 +161,8 @@ func main() {
 	flag.BoolVar(&enableSveltosCtrl, "enable-sveltos-ctrl", true, "Enable Sveltos built-in provider controller")
 	flag.BoolVar(&enableSveltosExpireCtrl, "enable-sveltos-expire-ctrl", false, "Enable SveltosCluster stuck (expired) tokens controller")
 	flag.BoolVar(&enableFluxCtrl, "enable-flux-ctrl", false, "Enable the Flux built-in state management provider controller")
+	flag.BoolVar(&enableArgoCDCtrl, "enable-argocd-ctrl", false, "Enable the Argo CD built-in state management provider controller")
+	flag.StringVar(&argocdNamespace, "argocd-namespace", argocd.DefaultNamespace, "Namespace Argo CD runs in; its Applications are created there")
 	flag.BoolVar(&enableInPlaceUpdates, "enable-in-place-updates", false,
 		"Enable Cluster API in-place updates (experimental), passed as global.enableInPlaceUpdates value to the providers")
 	flag.BoolVar(&enableInPlaceVersionWithDeleteFirst, "enable-in-place-version-with-delete-first", false,
@@ -291,6 +299,8 @@ func main() {
 		enableSveltosCtrl:                   enableSveltosCtrl,
 		enableSveltosExpireCtrl:             enableSveltosExpireCtrl,
 		enableFluxCtrl:                      enableFluxCtrl,
+		enableArgoCDCtrl:                    enableArgoCDCtrl,
+		argocdNamespace:                     argocdNamespace,
 		enableInPlaceUpdates:                enableInPlaceUpdates,
 		enableInPlaceVersionWithDeleteFirst: enableInPlaceVersionWithDeleteFirst,
 		defaultHelmTimeout:                  defaultHelmTimeout,
@@ -387,6 +397,8 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 		EnableInPlaceUpdates:                cfg.enableInPlaceUpdates,
 		EnableInPlaceVersionWithDeleteFirst: cfg.enableInPlaceVersionWithDeleteFirst,
 		EnableFluxAdapter:                   cfg.enableFluxCtrl,
+		EnableArgoCDAdapter:                 cfg.enableArgoCDCtrl,
+		ArgoCDNamespace:                     cfg.argocdNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Management")
 		return err
@@ -514,6 +526,26 @@ func setupControllers(mgr ctrl.Manager, currentNamespace string, cfg config) err
 			return err
 		}
 		setupLog.Info("setup for Flux ServiceSet controller successful")
+	}
+
+	if cfg.enableArgoCDCtrl {
+		// Argo CD is not shipped by KCM, so its types are only added to the
+		// scheme when the adapter that needs them is on.
+		setupLog.Info("adding Argo CD types to the scheme")
+		utilruntime.Must(argocdv1.AddToScheme(scheme))
+
+		setupLog.Info("setting up built-in Argo CD ServiceSet controller")
+		if err = (&argocd.ServiceSetReconciler{
+			SystemNamespace:         currentNamespace,
+			ArgoNamespace:           cfg.argocdNamespace,
+			AdapterName:             os.Getenv("KCM_NAME"),
+			AdapterNamespace:        currentNamespace,
+			MaxConcurrentReconciles: cfg.maxConcurrentReconciles,
+		}).SetupWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create controller", "controller", "ServiceSet")
+			return err
+		}
+		setupLog.Info("setup for Argo CD ServiceSet controller successful")
 	}
 
 	if cfg.enableSveltosExpireCtrl {

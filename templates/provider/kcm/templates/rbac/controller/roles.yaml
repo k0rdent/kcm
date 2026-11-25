@@ -84,6 +84,11 @@ rules:
   - k0smotroncontrolplanes
   verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
 - apiGroups:
+  - argoproj.io
+  resources:
+  - applications
+  verbs: {{ include "rbac.editorVerbs" . | nindent 4 }}
+- apiGroups:
   - helm.toolkit.fluxcd.io
   resources:
   - helmreleases

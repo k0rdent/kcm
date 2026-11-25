@@ -34,14 +34,12 @@ import (
 
 	helmcontrollerv2 "github.com/fluxcd/helm-controller/api/v2"
 	fluxmeta "github.com/fluxcd/pkg/apis/meta"
-	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/json"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -50,8 +48,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	"github.com/K0rdent/kcm/internal/controller/adapters/adapterutil"
 	"github.com/K0rdent/kcm/internal/record"
-	"github.com/K0rdent/kcm/internal/serviceset"
 	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 	ratelimitutil "github.com/K0rdent/kcm/internal/util/ratelimit"
 )
@@ -149,7 +147,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, r.Update(ctx, serviceSet)
 	}
 
-	continueReconciliation, err := labelsMatchSelector(serviceSet.Labels, smp.Spec.Selector)
+	continueReconciliation, err := adapterutil.LabelsMatchSelector(serviceSet.Labels, smp.Spec.Selector)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to check ServiceSet labels: %w", err)
 	}
@@ -161,7 +159,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	clone := serviceSet.DeepCopy()
 	defer func() {
 		if err == nil {
-			fillNotDeployedServices(serviceSet, r.timeFunc)
+			adapterutil.FillNotDeployedServices(serviceSet, r.timeFunc)
 		}
 		// The status is written even when reconciliation failed, so that the
 		// failure is visible on the object and not only in the logs. The
@@ -175,7 +173,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		l.Info("Finished reconciling ServiceSet", "duration", time.Since(start), "err", err)
 	}()
 
-	serviceSet.Status.Cluster = clusterReference(serviceSet)
+	serviceSet.Status.Cluster = adapterutil.ClusterReference(serviceSet)
 	serviceSet.Status.Provider = kcmv1.ProviderState{
 		Ready:     smp.Status.Ready,
 		Suspended: smp.Spec.Suspend,
@@ -200,7 +198,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err = r.ensureHelmReleases(ctx, serviceSet); err != nil {
 		conditionOldState := apimeta.FindStatusCondition(clone.Status.Conditions, kcmv1.ServiceSetProfileCondition)
 		conditionNewState := apimeta.FindStatusCondition(serviceSet.Status.Conditions, kcmv1.ServiceSetProfileCondition)
-		if conditionStatusChangedToFalse(conditionOldState, conditionNewState) {
+		if adapterutil.ConditionStatusChangedToFalse(conditionOldState, conditionNewState) {
 			record.Warnf(serviceSet, nil, kcmv1.ServiceSetEnsureProfileFailedEvent, kcmv1.ServiceSetEnsureProfileEventAction,
 				"Failed to ensure HelmReleases for ServiceSet %s: %v", serviceSet.Name, err)
 		}
@@ -210,7 +208,7 @@ func (r *ServiceSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err = r.collectServiceStatuses(ctx, serviceSet); err != nil {
 		conditionOldState := apimeta.FindStatusCondition(clone.Status.Conditions, kcmv1.ServiceSetStatusesCollectedCondition)
 		conditionNewState := apimeta.FindStatusCondition(serviceSet.Status.Conditions, kcmv1.ServiceSetStatusesCollectedCondition)
-		if conditionStatusChangedToFalse(conditionOldState, conditionNewState) {
+		if adapterutil.ConditionStatusChangedToFalse(conditionOldState, conditionNewState) {
 			record.Warnf(serviceSet, nil, kcmv1.ServiceSetCollectServiceStatusesFailedEvent, kcmv1.ServiceSetCollectServiceStatusesEventAction,
 				"Failed to collect Service statuses for ServiceSet %s: %v", serviceSet.Name, err)
 		}
@@ -323,7 +321,7 @@ func (r *ServiceSetReconciler) ensureHelmReleases(ctx context.Context, serviceSe
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Ensuring HelmReleases")
 
-	profileCondition := findCondition(serviceSet, kcmv1.ServiceSetProfileCondition)
+	profileCondition := adapterutil.FindCondition(serviceSet, kcmv1.ServiceSetProfileCondition)
 	initialConditionStatus := profileCondition.Status
 
 	status := metav1.ConditionFalse
@@ -331,7 +329,7 @@ func (r *ServiceSetReconciler) ensureHelmReleases(ctx context.Context, serviceSe
 	message := kcmv1.ServiceSetProfileNotReadyMessage
 
 	defer func(initialStatus metav1.ConditionStatus) {
-		updated := updateCondition(serviceSet, profileCondition, status, reason, message, r.timeFunc())
+		updated := adapterutil.UpdateCondition(serviceSet, profileCondition, status, reason, message, r.timeFunc())
 		if initialStatus != status && status == metav1.ConditionTrue && updated {
 			record.Eventf(serviceSet, nil, kcmv1.ServiceSetEnsureProfileSuccessEvent, kcmv1.ServiceSetEnsureProfileEventAction,
 				"Successfully ensured HelmReleases for ServiceSet %s", serviceSet.Name)
@@ -538,7 +536,7 @@ func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, servi
 	l := ctrl.LoggerFrom(ctx)
 	l.Info("Collecting Service statuses")
 
-	statusesCollectedCondition := findCondition(serviceSet, kcmv1.ServiceSetStatusesCollectedCondition)
+	statusesCollectedCondition := adapterutil.FindCondition(serviceSet, kcmv1.ServiceSetStatusesCollectedCondition)
 	initialConditionStatus := statusesCollectedCondition.Status
 
 	status := metav1.ConditionFalse
@@ -546,7 +544,7 @@ func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, servi
 	message := kcmv1.ServiceSetStatusesNotCollectedMessage
 
 	defer func(initialStatus metav1.ConditionStatus) {
-		updated := updateCondition(serviceSet, statusesCollectedCondition, status, reason, message, r.timeFunc())
+		updated := adapterutil.UpdateCondition(serviceSet, statusesCollectedCondition, status, reason, message, r.timeFunc())
 		if initialStatus != status && status == metav1.ConditionTrue && updated {
 			record.Eventf(serviceSet, nil, kcmv1.ServiceSetCollectServiceStatusesSuccessEvent, kcmv1.ServiceSetCollectServiceStatusesEventAction,
 				"Successfully collected service statuses for ServiceSet %s", serviceSet.Name)
@@ -607,33 +605,12 @@ func (r *ServiceSetReconciler) collectServiceStatuses(ctx context.Context, servi
 		return s.State != kcmv1.ServiceStateDeployed
 	})
 
-	r.updateServicesInReadyStateCondition(serviceSet)
+	adapterutil.UpdateServicesInReadyStateCondition(serviceSet, r.timeFunc())
 
 	status = metav1.ConditionTrue
 	reason = kcmv1.ServiceSetStatusesCollectedReason
 	message = kcmv1.ServiceSetStatusesCollectedMessage
 	return nil
-}
-
-// updateServicesInReadyStateCondition updates the "ServicesInReadyState" condition.
-func (r *ServiceSetReconciler) updateServicesInReadyStateCondition(serviceSet *kcmv1.ServiceSet) {
-	deployedCount := 0
-	for _, svc := range serviceSet.Status.Services {
-		if svc.State == kcmv1.ServiceStateDeployed {
-			deployedCount++
-		}
-	}
-	totalCount := len(serviceSet.Spec.Services)
-	svcReadyCond := findCondition(serviceSet, kcmv1.ServicesInReadyStateCondition)
-	svcReadyStatus := metav1.ConditionTrue
-	if deployedCount != totalCount {
-		svcReadyStatus = metav1.ConditionFalse
-	}
-
-	if deployedCount <= totalCount {
-		updateCondition(serviceSet, svcReadyCond, svcReadyStatus, kcmv1.ServicesInReadyStateCondition,
-			fmt.Sprintf("%d/%d", deployedCount, totalCount), r.timeFunc())
-	}
 }
 
 // serviceStateFromHelmRelease maps the Flux conditions of a HelmRelease onto
@@ -964,85 +941,4 @@ func providerConfigFromJSON(raw *apiextv1.JSON) (providerConfig, error) {
 func isPaused(serviceSet *kcmv1.ServiceSet) bool {
 	_, paused := serviceSet.GetAnnotations()[kcmv1.ServiceSetPausedAnnotation]
 	return paused
-}
-
-func clusterReference(serviceSet *kcmv1.ServiceSet) *corev1.ObjectReference {
-	if serviceSet.Spec.Provider.SelfManagement {
-		return serviceset.SelfManagementClusterReference()
-	}
-	return &corev1.ObjectReference{
-		Kind:       kcmv1.ClusterDeploymentKind,
-		Name:       serviceSet.Spec.Cluster,
-		Namespace:  serviceSet.Namespace,
-		APIVersion: kcmv1.GroupVersion.WithKind(kcmv1.ClusterDeploymentKind).GroupVersion().String(),
-	}
-}
-
-func fillNotDeployedServices(serviceSet *kcmv1.ServiceSet, now func() time.Time) {
-	known := make(map[client.ObjectKey]struct{}, len(serviceSet.Status.Services))
-	for _, service := range serviceSet.Status.Services {
-		known[client.ObjectKey{Namespace: service.Namespace, Name: service.Name}] = struct{}{}
-	}
-
-	for _, service := range serviceSet.Spec.Services {
-		key := client.ObjectKey{Namespace: service.Namespace, Name: service.Name}
-		if _, ok := known[key]; ok {
-			continue
-		}
-		serviceSet.Status.Services = append(serviceSet.Status.Services, kcmv1.ServiceState{
-			Name:                    service.Name,
-			Namespace:               service.Namespace,
-			Template:                service.Template,
-			Type:                    kcmv1.ServiceTypeHelm,
-			State:                   kcmv1.ServiceStateNotDeployed,
-			LastStateTransitionTime: new(metav1.NewTime(now())),
-		})
-	}
-}
-
-func labelsMatchSelector(serviceSetLabels map[string]string, selector *metav1.LabelSelector) (bool, error) {
-	if selector == nil {
-		return true, nil
-	}
-	labelSelector, err := metav1.LabelSelectorAsSelector(selector)
-	if err != nil {
-		return false, fmt.Errorf("failed to convert selector: %w", err)
-	}
-	return labelSelector.Matches(labels.Set(serviceSetLabels)), nil
-}
-
-func findCondition(serviceSet *kcmv1.ServiceSet, conditionType string) metav1.Condition {
-	condition := apimeta.FindStatusCondition(serviceSet.Status.Conditions, conditionType)
-	if condition == nil {
-		return metav1.Condition{
-			Type:   conditionType,
-			Status: metav1.ConditionUnknown,
-		}
-	}
-	return *condition
-}
-
-func updateCondition(
-	serviceSet *kcmv1.ServiceSet,
-	condition metav1.Condition,
-	status metav1.ConditionStatus,
-	reason, message string,
-	now time.Time,
-) bool {
-	condition.Status = status
-	condition.Reason = reason
-	condition.Message = message
-	condition.ObservedGeneration = serviceSet.Generation
-	condition.LastTransitionTime = metav1.NewTime(now)
-	return apimeta.SetStatusCondition(&serviceSet.Status.Conditions, condition)
-}
-
-func conditionStatusChangedToFalse(conditionOldState, conditionNewState *metav1.Condition) bool {
-	if conditionNewState == nil {
-		return false
-	}
-	if conditionOldState == nil {
-		return conditionNewState.Status == metav1.ConditionFalse
-	}
-	return conditionOldState.Status != conditionNewState.Status && conditionNewState.Status == metav1.ConditionFalse
 }

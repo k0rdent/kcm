@@ -32,10 +32,14 @@ const (
 	// FluxStateManagementProvider is the name of the Flux-backed provider. It is
 	// opt-in: a ServiceSet reaches it only by naming it in .spec.provider.name.
 	FluxStateManagementProvider = "ksm-flux"
+	// ArgoCDStateManagementProvider is the name of the Argo CD-backed provider,
+	// opt-in in the same way.
+	ArgoCDStateManagementProvider = "ksm-argocd"
 
 	DefaultStateManagementProviderSelectorKey   = "ksm.k0rdent.mirantis.com/adapter"
 	DefaultStateManagementProviderSelectorValue = "kcm-controller-manager"
 	FluxStateManagementProviderSelectorValue    = "kcm-controller-manager-flux"
+	ArgoCDStateManagementProviderSelectorValue  = "kcm-controller-manager-argocd"
 )
 
 func EnsureDeleteAllOf(ctx context.Context, cl client.Client, gvk schema.GroupVersionKind, opts *client.ListOptions) (requeue bool, err error) {

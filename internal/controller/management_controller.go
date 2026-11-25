@@ -53,6 +53,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	argocdv1 "github.com/K0rdent/kcm/api/argocd/v1alpha1"
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/config"
 	"github.com/K0rdent/kcm/internal/controller/components"
@@ -76,6 +77,7 @@ type ManagementReconciler struct {
 	RegistryCertSecretName        string // Name of a Secret with Registry Root CA with ca.crt key; used by ManagementReconciler and ClusterDeploymentReconciler
 	ImagePullSecretName           *string
 	RegistryCredentialsSecretName string
+	ArgoCDNamespace               string // where Argo CD runs, for the provider it is told to create
 
 	DefaultHelmTimeout      time.Duration
 	CAPIClusterPollInterval time.Duration // forwarded to the [ClusterDeploymentReconciler]
@@ -86,6 +88,7 @@ type ManagementReconciler struct {
 	EnableInPlaceUpdates                bool // passed to the components
 	EnableInPlaceVersionWithDeleteFirst bool // passed to the components
 	EnableFluxAdapter                   bool // creates the Flux-backed StateManagementProvider
+	EnableArgoCDAdapter                 bool // creates the Argo CD-backed StateManagementProvider
 
 	dependentControllersStarted bool
 }
@@ -197,6 +200,13 @@ func (r *ManagementReconciler) update(ctx context.Context, management *kcmv1.Man
 		if err := r.ensureFluxStateManagementProvider(ctx, management); err != nil {
 			r.warnf(management, "EnsureStateManagementProviderFailed", "failed to ensure Flux StateManagementProvider is created: %v", err)
 			l.Error(err, "failed to ensure Flux StateManagementProvider is created")
+		}
+	}
+
+	if r.EnableArgoCDAdapter {
+		if err := r.ensureArgoCDStateManagementProvider(ctx, management); err != nil {
+			r.warnf(management, "EnsureStateManagementProviderFailed", "failed to ensure Argo CD StateManagementProvider is created: %v", err)
+			l.Error(err, "failed to ensure Argo CD StateManagementProvider is created")
 		}
 	}
 
@@ -517,80 +527,153 @@ self.status.availableReplicas == self.status.readyReplicas`,
 	return nil
 }
 
+// deploymentReadinessRule is the CEL a StateManagementProvider evaluates to
+// decide whether a Deployment-shaped component is up.
+const deploymentReadinessRule = `self.status.availableReplicas == self.status.replicas &&
+self.status.availableReplicas == self.status.updatedReplicas &&
+self.status.availableReplicas == self.status.readyReplicas`
+
+// statefulSetReadinessRule is the same for a StatefulSet, which is how Argo CD
+// ships its application controller.
+const statefulSetReadinessRule = `self.status.readyReplicas == self.status.replicas &&
+self.status.readyReplicas == self.status.updatedReplicas`
+
 // ensureFluxStateManagementProvider creates the StateManagementProvider served
 // by the built-in Flux adapter. Unlike the sveltos one it is not the default:
 // a ServiceSet reaches it only by naming it in .spec.provider.name.
 func (r *ManagementReconciler) ensureFluxStateManagementProvider(ctx context.Context, mgmt *kcmv1.Management) error {
-	l := ctrl.LoggerFrom(ctx).WithValues("provider_name", kcmv1.AdapterKindFlux)
-
-	l.Info("Ensuring built-in StateManagementProvider for Flux is created")
 	currentNamespace := kubeutil.CurrentNamespace()
-	currentKcmName := os.Getenv("KCM_NAME")
 
 	const (
-		appsAPIGroupVersion = "apps/v1"
-		deploymentKind      = "Deployment"
-
 		helmControllerDeploymentName   = "helm-controller"
 		sourceControllerDeploymentName = "source-controller"
-
-		deploymentReadinessRule = `self.status.availableReplicas == self.status.replicas &&
-self.status.availableReplicas == self.status.updatedReplicas &&
-self.status.availableReplicas == self.status.readyReplicas`
 	)
 
-	stateManagementProvider := &kcmv1.StateManagementProvider{
-		Name:   kubeutil.FluxStateManagementProvider,
-		Labels: map[string]string{kcmv1.AdapterKindLabel: kcmv1.AdapterKindFlux},
-		OwnerReferences: []metav1.OwnerReference{
+	return r.ensureBuiltinStateManagementProvider(ctx, mgmt, builtinProvider{
+		name:          kubeutil.FluxStateManagementProvider,
+		kind:          kcmv1.AdapterKindFlux,
+		selectorValue: kubeutil.FluxStateManagementProviderSelectorValue,
+		provisioner: []kcmv1.ResourceReference{
 			{
-				APIVersion: kcmv1.GroupVersion.String(),
-				Kind:       mgmt.Kind,
-				Name:       mgmt.Name,
-				UID:        mgmt.UID,
+				APIVersion:    appsAPIGroupVersion,
+				Kind:          deploymentKind,
+				Name:          helmControllerDeploymentName,
+				Namespace:     currentNamespace,
+				ReadinessRule: deploymentReadinessRule,
+			},
+			{
+				APIVersion:    appsAPIGroupVersion,
+				Kind:          deploymentKind,
+				Name:          sourceControllerDeploymentName,
+				Namespace:     currentNamespace,
+				ReadinessRule: deploymentReadinessRule,
+			},
+		},
+		provisionerCRDs: []kcmv1.ProvisionerCRD{
+			{
+				Group:     helmcontrollerv2.GroupVersion.Group,
+				Version:   helmcontrollerv2.GroupVersion.Version,
+				Resources: []string{"helmreleases"},
+			},
+			{
+				Group:     sourcev1.GroupVersion.Group,
+				Version:   sourcev1.GroupVersion.Version,
+				Resources: []string{"helmcharts", "helmrepositories"},
+			},
+		},
+	})
+}
+
+// ensureArgoCDStateManagementProvider creates the StateManagementProvider
+// served by the built-in Argo CD adapter. Argo CD is not shipped by KCM, so
+// its namespace is whatever the operator installed it in.
+func (r *ManagementReconciler) ensureArgoCDStateManagementProvider(ctx context.Context, mgmt *kcmv1.Management) error {
+	const (
+		statefulSetKind = "StatefulSet"
+
+		applicationControllerName = "argocd-application-controller"
+		repoServerName            = "argocd-repo-server"
+	)
+
+	return r.ensureBuiltinStateManagementProvider(ctx, mgmt, builtinProvider{
+		name:          kubeutil.ArgoCDStateManagementProvider,
+		kind:          kcmv1.AdapterKindArgoCD,
+		selectorValue: kubeutil.ArgoCDStateManagementProviderSelectorValue,
+		provisioner: []kcmv1.ResourceReference{
+			{
+				// A StatefulSet: that is what the Argo CD chart and the
+				// upstream install manifest both make of it.
+				APIVersion:    appsAPIGroupVersion,
+				Kind:          statefulSetKind,
+				Name:          applicationControllerName,
+				Namespace:     r.ArgoCDNamespace,
+				ReadinessRule: statefulSetReadinessRule,
+			},
+			{
+				APIVersion:    appsAPIGroupVersion,
+				Kind:          deploymentKind,
+				Name:          repoServerName,
+				Namespace:     r.ArgoCDNamespace,
+				ReadinessRule: deploymentReadinessRule,
+			},
+		},
+		provisionerCRDs: []kcmv1.ProvisionerCRD{
+			{
+				Group:     argocdv1.GroupVersion.Group,
+				Version:   argocdv1.GroupVersion.Version,
+				Resources: []string{"applications"},
+			},
+		},
+	})
+}
+
+// builtinProvider is what differs between the StateManagementProviders KCM
+// creates for its own adapters.
+type builtinProvider struct {
+	name            string
+	kind            string
+	selectorValue   string
+	provisioner     []kcmv1.ResourceReference
+	provisionerCRDs []kcmv1.ProvisionerCRD
+}
+
+const (
+	appsAPIGroupVersion = "apps/v1"
+	deploymentKind      = "Deployment"
+)
+
+func (r *ManagementReconciler) ensureBuiltinStateManagementProvider(ctx context.Context, mgmt *kcmv1.Management, p builtinProvider) error {
+	l := ctrl.LoggerFrom(ctx).WithValues("provider_name", p.name)
+	l.Info("Ensuring built-in StateManagementProvider is created")
+
+	stateManagementProvider := &kcmv1.StateManagementProvider{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   p.name,
+			Labels: map[string]string{kcmv1.AdapterKindLabel: p.kind},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: kcmv1.GroupVersion.String(),
+					Kind:       mgmt.Kind,
+					Name:       mgmt.Name,
+					UID:        mgmt.UID,
+				},
 			},
 		},
 		Spec: kcmv1.StateManagementProviderSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					kubeutil.DefaultStateManagementProviderSelectorKey: kubeutil.FluxStateManagementProviderSelectorValue,
+					kubeutil.DefaultStateManagementProviderSelectorKey: p.selectorValue,
 				},
 			},
 			Adapter: kcmv1.ResourceReference{
 				APIVersion:    appsAPIGroupVersion,
 				Kind:          deploymentKind,
-				Name:          currentKcmName,
-				Namespace:     currentNamespace,
+				Name:          os.Getenv("KCM_NAME"),
+				Namespace:     kubeutil.CurrentNamespace(),
 				ReadinessRule: deploymentReadinessRule,
 			},
-			Provisioner: []kcmv1.ResourceReference{
-				{
-					APIVersion:    appsAPIGroupVersion,
-					Kind:          deploymentKind,
-					Name:          helmControllerDeploymentName,
-					Namespace:     currentNamespace,
-					ReadinessRule: deploymentReadinessRule,
-				},
-				{
-					APIVersion:    appsAPIGroupVersion,
-					Kind:          deploymentKind,
-					Name:          sourceControllerDeploymentName,
-					Namespace:     currentNamespace,
-					ReadinessRule: deploymentReadinessRule,
-				},
-			},
-			ProvisionerCRDs: []kcmv1.ProvisionerCRD{
-				{
-					Group:     helmcontrollerv2.GroupVersion.Group,
-					Version:   helmcontrollerv2.GroupVersion.Version,
-					Resources: []string{"helmreleases"},
-				},
-				{
-					Group:     sourcev1.GroupVersion.Group,
-					Version:   sourcev1.GroupVersion.Version,
-					Resources: []string{"helmcharts", "helmrepositories"},
-				},
-			},
+			Provisioner:     p.provisioner,
+			ProvisionerCRDs: p.provisionerCRDs,
 		},
 	}
 

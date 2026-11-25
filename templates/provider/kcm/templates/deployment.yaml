@@ -64,6 +64,10 @@ spec:
         {{- if .Values.controller.enableFluxCtrl }}
         - --enable-flux-ctrl={{ .Values.controller.enableFluxCtrl }}
         {{- end }}
+        {{- if .Values.controller.enableArgoCDCtrl }}
+        - --enable-argocd-ctrl={{ .Values.controller.enableArgoCDCtrl }}
+        - --argocd-namespace={{ .Values.controller.argoCDNamespace }}
+        {{- end }}
         {{- if .Values.controller.enableInPlaceUpdates }}
         - --enable-in-place-updates={{ .Values.controller.enableInPlaceUpdates }}
         {{- end }}

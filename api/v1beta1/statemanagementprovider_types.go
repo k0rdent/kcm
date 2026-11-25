@@ -124,6 +124,8 @@ const (
 	AdapterKindSveltos = "sveltos"
 	// AdapterKindFlux is the Flux-backed adapter.
 	AdapterKindFlux = "flux"
+	// AdapterKindArgoCD is the Argo CD-backed adapter.
+	AdapterKindArgoCD = "argo"
 )
 
 // AdapterKind returns the built-in adapter serving this provider.
