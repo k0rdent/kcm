@@ -371,7 +371,7 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 	specVersions := make(map[client.ObjectKey]string, len(serviceSet.Spec.Services))
 	for i := range serviceSet.Spec.Services {
 		svc := &serviceSet.Spec.Services[i]
-		specVersions[client.ObjectKey{Namespace: svc.Namespace, Name: svc.Name}] = svc.Version
+		specVersions[serviceset.ServiceKey(svc.Namespace, svc.Name)] = svc.Version
 	}
 
 	childClient, err := getChildClient(ctx, r.Client, rgnClient, serviceSet)
@@ -396,7 +396,9 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 			continue
 		}
 
-		serviceKey := client.ObjectKey{Namespace: s.Namespace, Name: s.Name}
+		// Normalise the namespace so a service with an empty namespace
+		// matches its release, which is installed in the default namespace.
+		serviceKey := serviceset.ServiceKey(s.Namespace, s.Name)
 		currentHash := serviceHashes[serviceKey]
 
 		// Combine sveltos's verdict with the verifier's on-cluster verdict:
@@ -417,9 +419,9 @@ func (r *ServiceSetReconciler) verifyServiceStates(ctx context.Context, rgnClien
 		//      promote from sveltos-Provisioning: the healthy pods may be
 		//      stale previous-version pods still running before a rollout
 		//      starts. We wait until sveltos itself confirms Deployed.
-		verifierState, conds, err := verifyHelmServiceOnCluster(ctx, childClient, rules, s.Name, s.Namespace)
+		verifierState, conds, err := verifyHelmServiceOnCluster(ctx, childClient, rules, serviceKey.Name, serviceKey.Namespace)
 		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("verify service %s/%s: %w", s.Namespace, s.Name, err))
+			errs = errors.Join(errs, fmt.Errorf("verify service %s: %w", serviceKey, err))
 			continue
 		}
 
@@ -1206,20 +1208,25 @@ func helmChartFromSpecOrRef(
 		ValuesFrom:    convertValuesFrom(svc.ValuesFrom, namespace),
 		RepositoryURL: repoURL,
 		// We don't have repository name so chart name becomes repository name.
-		RepositoryName: chartName,
-		ChartName:      repoChartName,
-		ChartVersion:   chartVersion,
-		ReleaseName:    svc.Name,
-		ReleaseNamespace: func() string {
-			if svc.Namespace != "" {
-				return svc.Namespace
-			}
-			return svc.Name
-		}(),
+		RepositoryName:            chartName,
+		ChartName:                 repoChartName,
+		ChartVersion:              chartVersion,
+		ReleaseName:               svc.Name,
+		ReleaseNamespace:          releaseNamespace(svc),
 		RegistryCredentialsConfig: registryCredentialsConfig,
 		Options:                   convertHelmOptions(helmOptions),
 	}
 	return helmChart, nil
+}
+
+// releaseNamespace returns the namespace to install the service's Helm release in.
+// An empty service namespace means the default namespace, as documented on
+// [kcmv1.ServiceWithValues.Namespace].
+func releaseNamespace(svc kcmv1.ServiceWithValues) string {
+	if svc.Namespace == "" {
+		return metav1.NamespaceDefault
+	}
+	return svc.Namespace
 }
 
 // mergeHelmOptions merges the values from the given source ServiceHelmOptions to the destination ServiceHelmOptions
@@ -1340,7 +1347,7 @@ func helmChartFromFluxSource(
 		RepositoryURL:    url,
 		ChartName:        chartName,
 		ReleaseName:      svc.Name,
-		ReleaseNamespace: svc.Namespace,
+		ReleaseNamespace: releaseNamespace(svc),
 		Values:           svc.Values,
 		ValuesFrom:       convertValuesFrom(svc.ValuesFrom, namespace),
 		Options:          convertHelmOptions(helmOptions),

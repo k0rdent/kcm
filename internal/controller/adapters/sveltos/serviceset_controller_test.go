@@ -1126,8 +1126,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		)
 		valuesHash := []byte("values-hash-verifier-hashgate")
 
-		// releaseNs is set per-It to the ServiceSet's own namespace so the
-		// helper cleans up alongside the outer AfterEach. Envtest cannot
+		// releaseNs is set per-It, normally to the ServiceSet's own namespace
+		// so the helper cleans up alongside the outer AfterEach. Envtest cannot
 		// actually finish namespace teardown (no ns-lifecycle controller),
 		// so reusing a shared release namespace would leak state across
 		// test cases.
@@ -1140,8 +1140,8 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		// entry. Returns the service hash the verifier will compute from
 		// these artifacts — callers pre-seed LastDeployedHash to make the
 		// hash match or mismatch as required by the test case.
-		prepareVerifierArtifacts := func() string {
-			releaseNs = namespace.Name
+		prepareVerifierArtifacts := func(relNs string) string {
+			releaseNs = relNs
 
 			By("targeting the reconciler at the ServiceSet's namespace for tier-1 rules", func() {
 				reconciler.SystemNamespace = namespace.Name
@@ -1328,7 +1328,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		}
 
 		It("Case A: promotes on hash match (unrelated apply demoted us)", func() {
-			expectedHash := prepareVerifierArtifacts()
+			expectedHash := prepareVerifierArtifacts(namespace.Name)
 			// Sveltos-side hash equals what we last confirmed → the pods
 			// the verifier sees ARE the confirmed version → safe to
 			// promote back from the aggregate-demoted Provisioning.
@@ -1345,7 +1345,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		})
 
 		It("Case B: does NOT promote when hash advanced (our real apply in progress)", func() {
-			_ = prepareVerifierArtifacts()
+			_ = prepareVerifierArtifacts(namespace.Name)
 			// Sveltos-side hash has moved past what we last confirmed →
 			// sveltos is applying a new version of THIS service. The
 			// healthy pods the verifier just observed could be stale
@@ -1364,7 +1364,7 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		})
 
 		It("Case C: stamps hash+version when both sveltos and verifier agree on new hash", func() {
-			expectedHash := prepareVerifierArtifacts()
+			expectedHash := prepareVerifierArtifacts(namespace.Name)
 			// Sveltos already says Deployed, verifier confirms healthy,
 			// hash has advanced since last confirmed. This is the "both
 			// authoritative signals agree" intersection — safe to record
@@ -1380,6 +1380,27 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 			Expect(svc.State).To(Equal(kcmv1.ServiceStateDeployed), "both agreed → stays Deployed")
 			Expect(svc.LastDeployedHash).To(Equal(expectedHash), "hash advances to sveltos-side fingerprint")
 			Expect(svc.Version).To(Equal(specVersion), "version stamps to Spec.Services[i].Version")
+		})
+
+		It("Case D: matches a service with an empty namespace to its release in the default namespace", func() {
+			// An empty service namespace means the default namespace, so the
+			// release lands there while spec and status keep the empty value.
+			// The verifier must still find the release's hash and resources.
+			expectedHash := prepareVerifierArtifacts(metav1.NamespaceDefault)
+			staleHash := "sha256:previous-confirmed-hash"
+			seedServiceStatus(kcmv1.ServiceStateDeployed, staleHash, "1.0.0")
+			serviceSet.Spec.Services[0].Namespace = ""
+			serviceSet.Status.Services[0].Namespace = ""
+
+			pendingStamp, err := reconciler.verifyServiceStates(ctx, cl, &serviceSet)
+			Expect(err).To(Succeed())
+			Expect(pendingStamp).To(BeFalse(), "release hash found under the default namespace — no requeue needed")
+
+			svc := serviceSet.Status.Services[0]
+			Expect(svc.State).To(Equal(kcmv1.ServiceStateDeployed))
+			Expect(svc.LastDeployedHash).To(Equal(expectedHash), "hash resolved via the default namespace")
+			Expect(svc.Version).To(Equal(specVersion), "version stamps to Spec.Services[i].Version")
+			Expect(svc.Namespace).To(BeEmpty(), "status keeps the spec's namespace as written")
 		})
 	})
 })
