@@ -122,6 +122,11 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		return ctrl.Result{}, err
 	}
 
+	if r.validateServiceSpecDriftDetection(ctx, mcs) {
+		// Will not retrigger this error because nothing to do until spec is changed.
+		return ctrl.Result{}, nil
+	}
+
 	l.Info("Validating service templates")
 	if err := validationutil.ServicesHaveValidTemplates(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace); err != nil {
 		if r.setCondition(mcs, kcmv1.ServicesReferencesValidationCondition, err) {
@@ -294,6 +299,24 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	mcs.Status.ServicesUpgradePaths = upgradePaths
 
 	return result, errors.Join(servicesErr, clustersErr)
+}
+
+// validateServiceSpecDriftDetection validates that mcs.Spec.ServiceSpec does not request the
+// unsupported ContinuousWithDriftDetection sync mode, sets the corresponding condition, and
+// returns true if reconciliation should stop here.
+func (r *MultiClusterServiceReconciler) validateServiceSpecDriftDetection(ctx context.Context, mcs *kcmv1.MultiClusterService) bool {
+	l := ctrl.LoggerFrom(ctx)
+
+	l.Info("Validating serviceSpec drift detection sync mode")
+	if err := validationutil.MultiClusterServiceDriftDetection(mcs); err != nil {
+		if r.setCondition(mcs, kcmv1.ServiceSpecDriftDetectionValidationCondition, err) {
+			record.Warnf(mcs, nil, kcmv1.ServiceSpecDriftDetectionValidationCondition, "ValidateServiceSpecDriftDetection", err.Error())
+		}
+		l.Error(err, "failed to validate serviceSpec drift detection sync mode, will not retrigger")
+		return true
+	}
+	r.setCondition(mcs, kcmv1.ServiceSpecDriftDetectionValidationCondition, nil)
+	return false
 }
 
 // setClustersCondition updates MultiClusterService's condition which shows number of clusters where services were

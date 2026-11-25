@@ -16,9 +16,11 @@ package validation
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"k8s.io/apimachinery/pkg/api/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,7 +32,36 @@ import (
 var (
 	errServicesHaveValidTemplates = errors.New("some services have invalid templates")
 	errServicesDependency         = errors.New("some services have invalid dependencies")
+	errDriftDetectionNotSupported = errors.New("SyncModeContinuousWithDriftDetection is not supported")
 )
+
+// serviceSpecDriftDetection validates that the given [github.com/K0rdent/kcm/api/v1beta1.ServiceSpec]
+// does not request the unsupported ContinuousWithDriftDetection sync mode, whether set via the
+// deprecated top-level syncMode field or via the provider-specific raw config.
+func serviceSpecDriftDetection(spec kcmv1.ServiceSpec) error {
+	if spec.SyncMode == string(addoncontrollerv1beta1.SyncModeContinuousWithDriftDetection) { //nolint:staticcheck // SA1019: still need to catch the deprecated field until it's removed
+		return errDriftDetectionNotSupported
+	}
+
+	if spec.Provider.Config == nil {
+		return nil
+	}
+
+	type providerConfig struct {
+		SyncMode string `json:"syncMode,omitempty"`
+	}
+
+	params := new(providerConfig)
+	if err := json.Unmarshal(spec.Provider.Config.Raw, params); err != nil {
+		return fmt.Errorf("failed to unmarshal raw config to profile configuration: %w", err)
+	}
+
+	if params.SyncMode == string(addoncontrollerv1beta1.SyncModeContinuousWithDriftDetection) {
+		return errDriftDetectionNotSupported
+	}
+
+	return nil
+}
 
 // ServicesHaveValidTemplates validates the given array of [github.com/K0rdent/kcm/api/v1beta1.Service] checking
 // if referenced [github.com/K0rdent/kcm/api/v1beta1.ServiceTemplate] is valid and is ready to be consumed.

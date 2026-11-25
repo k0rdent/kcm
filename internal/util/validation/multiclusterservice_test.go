@@ -17,12 +17,111 @@ package validation
 import (
 	"testing"
 
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/stretchr/testify/require"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
+
+func TestMultiClusterServiceDriftDetection(t *testing.T) {
+	tests := []struct {
+		name string
+		mcs  *kcmv1.MultiClusterService
+		err  string
+	}{
+		{
+			name: "no serviceSpec: success",
+			mcs:  &kcmv1.MultiClusterService{Name: "mcs1"},
+		},
+		{
+			name: "top-level syncMode Continuous: success",
+			mcs: &kcmv1.MultiClusterService{
+				Name: "mcs1",
+				Spec: kcmv1.MultiClusterServiceSpec{
+					ServiceSpec: kcmv1.ServiceSpec{SyncMode: string(addoncontrollerv1beta1.SyncModeContinuous)}, //nolint:staticcheck
+				},
+			},
+		},
+		{
+			name: "top-level syncMode ContinuousWithDriftDetection: error",
+			mcs: &kcmv1.MultiClusterService{
+				Name: "mcs1",
+				Spec: kcmv1.MultiClusterServiceSpec{
+					ServiceSpec: kcmv1.ServiceSpec{SyncMode: string(addoncontrollerv1beta1.SyncModeContinuousWithDriftDetection)}, //nolint:staticcheck
+				},
+			},
+			err: "SyncModeContinuousWithDriftDetection is not supported",
+		},
+		{
+			name: "provider.config without syncMode: success",
+			mcs: &kcmv1.MultiClusterService{
+				Name: "mcs1",
+				Spec: kcmv1.MultiClusterServiceSpec{
+					ServiceSpec: kcmv1.ServiceSpec{
+						Provider: kcmv1.StateManagementProviderConfig{
+							Config: &apiextv1.JSON{Raw: []byte(`{"priority":1}`)},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "provider.config syncMode Continuous: success",
+			mcs: &kcmv1.MultiClusterService{
+				Name: "mcs1",
+				Spec: kcmv1.MultiClusterServiceSpec{
+					ServiceSpec: kcmv1.ServiceSpec{
+						Provider: kcmv1.StateManagementProviderConfig{
+							Config: &apiextv1.JSON{Raw: []byte(`{"syncMode":"Continuous"}`)},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "provider.config syncMode ContinuousWithDriftDetection: error",
+			mcs: &kcmv1.MultiClusterService{
+				Name: "mcs1",
+				Spec: kcmv1.MultiClusterServiceSpec{
+					ServiceSpec: kcmv1.ServiceSpec{
+						Provider: kcmv1.StateManagementProviderConfig{
+							Config: &apiextv1.JSON{Raw: []byte(`{"syncMode":"ContinuousWithDriftDetection"}`)},
+						},
+					},
+				},
+			},
+			err: "SyncModeContinuousWithDriftDetection is not supported",
+		},
+		{
+			name: "provider.config malformed JSON: error",
+			mcs: &kcmv1.MultiClusterService{
+				Name: "mcs1",
+				Spec: kcmv1.MultiClusterServiceSpec{
+					ServiceSpec: kcmv1.ServiceSpec{
+						Provider: kcmv1.StateManagementProviderConfig{
+							Config: &apiextv1.JSON{Raw: []byte(`{`)},
+						},
+					},
+				},
+			},
+			err: "failed to unmarshal raw config to profile configuration",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := MultiClusterServiceDriftDetection(tt.mcs)
+			if tt.err == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tt.err)
+		})
+	}
+}
 
 func TestValidateMCSDependency(t *testing.T) {
 	for _, tc := range []struct {

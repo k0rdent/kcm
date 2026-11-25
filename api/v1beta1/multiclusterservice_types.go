@@ -57,6 +57,9 @@ const (
 	// ServicesDependencyValidationCondition defines the condition of services' dependencies.
 	ServicesDependencyValidationCondition = "ServicesDependencyValidation"
 
+	// ServiceSpecDriftDetectionValidationCondition defines the condition of serviceSpec's drift detection sync mode validation.
+	ServiceSpecDriftDetectionValidationCondition = "ServiceSpecDriftDetectionValidation"
+
 	// MultiClusterServiceDependencyValidationCondition defines the condition of MultiClusterService dependencies.
 	MultiClusterServiceDependencyValidationCondition = "MultiClusterServiceDependencyValidation"
 

@@ -452,6 +452,30 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			},
 			err: fmt.Sprintf("the ClusterDeployment is invalid: provider %s does not support ClusterIdentity Kind %s from the Credential %s/%s", "infrastructure-aws", "SomeOtherDummyClusterStaticIdentity", metav1.NamespaceDefault, testCredentialName),
 		},
+		{
+			name: "should fail if serviceSpec.syncMode is ContinuousWithDriftDetection",
+			ClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+				clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{SyncMode: "ContinuousWithDriftDetection"}), //nolint:staticcheck
+			),
+			existingObjects: []runtime.Object{
+				mgmt,
+				cred,
+				providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+				),
+			},
+			warnings: admission.Warnings{"Failed to validate syncMode for provided ClusterDeployment"},
+			err:      "SyncModeContinuousWithDriftDetection is not supported",
+		},
 	}
 
 	for _, tt := range tests {
@@ -1102,6 +1126,33 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 					}),
 				),
 			},
+		},
+		{
+			name:                      "should fail if serviceSpec.syncMode is updated to ContinuousWithDriftDetection",
+			skipUpgradePathValidation: true,
+			oldClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			newClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+				clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{SyncMode: "ContinuousWithDriftDetection"}), //nolint:staticcheck
+			),
+			existingObjects: []runtime.Object{
+				mgmt, cred, providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+				),
+			},
+			warnings: admission.Warnings{"Failed to validate syncMode for provided ClusterDeployment"},
+			err:      "SyncModeContinuousWithDriftDetection is not supported",
 		},
 	}
 	for _, tt := range tests {
