@@ -66,18 +66,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The same scenarios through both built-in adapters: the Flux one is
-        # what this branch adds, the Sveltos one is what must not regress.
-        provider: [ksm-projectsveltos, ksm-flux]
-    # WIP: the fork branch, not the pinned tag -- the Flux adapter needs the
+        # The same scenarios through every built-in adapter: two of them are
+        # what this branch adds, sveltos is what must not regress.
+        provider: [sveltos, argo, flux]
+    # WIP: the fork branch, not the pinned tag -- the new adapters need the
     # KSM_PROVIDER plumbing that only exists there. Back to k0rdent/ksm-tests
     # at a tag before this is proposed upstream.
-    uses: josef-hak/ksm-tests/.github/workflows/e2e.yml@flux
+    uses: josef-hak/ksm-tests/.github/workflows/e2e.yml@ksm-providers
     with:
       # The same ref as the uses: line above. A called workflow cannot discover
       # the ref it was reached at -- no context exposes it -- so it has to be
       # told, or it checks this repository out in place of its own.
-      ksm_ref: flux
+      ksm_ref: ksm-providers
       ksm_repo: josef-hak/ksm-tests
       KSM_PROVIDER: ${{ matrix.provider }}
       # The head commit, not the ref: a branch moves, and the run should say
