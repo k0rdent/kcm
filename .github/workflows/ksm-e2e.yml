@@ -26,11 +26,12 @@ on:
       - 'internal/webhook/**'
       - 'api/v1beta1/**'
       - 'cmd/**'
-      - 'templates/provider/kcm/**' # what deploy_k0rdent.sh installs
+      - 'templates/provider/**'
       - '.github/workflows/ksm-e2e.yml'
       - 'go.mod' # deps updates could change KSM behavior
       - 'go.sum'
       # Last, since a later pattern wins: nothing a scenario reaches.
+      - '!templates/provider/cluster-api-provider-*/**'
       - '!internal/controller/backup/**'
       - '!internal/controller/management_backup_controller.go'
       - '!internal/controller/accessmanagement_*.go'
