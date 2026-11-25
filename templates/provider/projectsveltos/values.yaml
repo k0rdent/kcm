@@ -1,0 +1,10 @@
+# Disable all optional components.
+projectsveltos:
+  accessManager:
+    enabled: false
+  shardController:
+    enabled: false
+  mcpServer:
+    enabled: false
+  techsupportController:
+    enabled: false
