@@ -2642,7 +2642,7 @@ func ignoreDeletePredicate() predicate.Funcs {
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error { //nolint:maintidx // the TODO(KLUDGE) k0s worker UpToDate nudger registration tips it over the limit
 	r.MgmtClient = mgr.GetClient()
 	r.helmActor = helm.NewActor(mgr.GetConfig(), r.MgmtClient.RESTMapper())
 
@@ -2825,6 +2825,10 @@ func (r *ClusterDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}
 
 		managedController.WatchesRawSource(source.TypedChannel(capiPoller.GetEventChannel(), &handler.TypedEnqueueRequestForObject[*kcmv1.ClusterDeployment]{}))
+	}
+
+	if err := r.addK0sWorkerUpToDateNudger(mgr); err != nil { // TODO(KLUDGE): DELETE once kubernetes-sigs/cluster-api#14086 is fixed
+		return err
 	}
 
 	return managedController.Complete(r)

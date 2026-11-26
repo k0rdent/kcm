@@ -1,0 +1,9 @@
+{{- /*
+TODO(KLUDGE): DELETE THIS FILE once Cluster API reports k0s workers as up to date by itself.
+Track https://github.com/kubernetes-sigs/cluster-api/issues/14086
+Temporary KCM-only kludge, NOT supported or recommended by the Cluster API community.
+See files/k0s-worker-uptodate-policy.yaml for everything to delete together with it.
+*/}}
+{{- if and .Values.k0sWorkerUpToDatePolicy.enabled (.Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1/MutatingAdmissionPolicy") }}
+{{ .Files.Get "files/k0s-worker-uptodate-policy.yaml" }}
+{{- end }}
