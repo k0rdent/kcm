@@ -21,7 +21,6 @@ import (
 
 	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -29,104 +28,29 @@ import (
 	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
 
+// TestClusterDeployDriftDetection only checks that the wrapper forwards
+// cd.Spec.ServiceSpec to serviceSpecDriftDetection; see TestServiceSpecDriftDetection
+// in services_test.go for the full matrix of cases.
 func TestClusterDeployDriftDetection(t *testing.T) {
-	tests := []struct {
-		name string
-		cd   *kcmv1.ClusterDeployment
-		err  string
-	}{
-		{
-			name: "no serviceSpec: success",
-			cd:   &kcmv1.ClusterDeployment{Name: "cd1", Namespace: "ns1"},
-		},
-		{
-			name: "top-level syncMode Continuous: success",
-			cd: &kcmv1.ClusterDeployment{
-				Name: "cd1", Namespace: "ns1",
-				Spec: kcmv1.ClusterDeploymentSpec{
-					ServiceSpec: kcmv1.ServiceSpec{SyncMode: string(addoncontrollerv1beta1.SyncModeContinuous)}, //nolint:staticcheck
-				},
-			},
-		},
-		{
-			name: "top-level syncMode ContinuousWithDriftDetection: error",
-			cd: &kcmv1.ClusterDeployment{
-				Name: "cd1", Namespace: "ns1",
-				Spec: kcmv1.ClusterDeploymentSpec{
-					ServiceSpec: kcmv1.ServiceSpec{SyncMode: string(addoncontrollerv1beta1.SyncModeContinuousWithDriftDetection)}, //nolint:staticcheck
-				},
-			},
-			err: "SyncModeContinuousWithDriftDetection is not supported",
-		},
-		{
-			name: "provider.config without syncMode: success",
-			cd: &kcmv1.ClusterDeployment{
-				Name: "cd1", Namespace: "ns1",
-				Spec: kcmv1.ClusterDeploymentSpec{
-					ServiceSpec: kcmv1.ServiceSpec{
-						Provider: kcmv1.StateManagementProviderConfig{
-							Config: &apiextv1.JSON{Raw: []byte(`{"priority":1}`)},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "provider.config syncMode Continuous: success",
-			cd: &kcmv1.ClusterDeployment{
-				Name: "cd1", Namespace: "ns1",
-				Spec: kcmv1.ClusterDeploymentSpec{
-					ServiceSpec: kcmv1.ServiceSpec{
-						Provider: kcmv1.StateManagementProviderConfig{
-							Config: &apiextv1.JSON{Raw: []byte(`{"syncMode":"Continuous"}`)},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "provider.config syncMode ContinuousWithDriftDetection: error",
-			cd: &kcmv1.ClusterDeployment{
-				Name: "cd1", Namespace: "ns1",
-				Spec: kcmv1.ClusterDeploymentSpec{
-					ServiceSpec: kcmv1.ServiceSpec{
-						Provider: kcmv1.StateManagementProviderConfig{
-							Config: &apiextv1.JSON{Raw: []byte(`{"syncMode":"ContinuousWithDriftDetection"}`)},
-						},
-					},
-				},
-			},
-			err: "SyncModeContinuousWithDriftDetection is not supported",
-		},
-		{
-			name: "provider.config malformed JSON: error",
-			cd: &kcmv1.ClusterDeployment{
-				Name: "cd1", Namespace: "ns1",
-				Spec: kcmv1.ClusterDeploymentSpec{
-					ServiceSpec: kcmv1.ServiceSpec{
-						Provider: kcmv1.StateManagementProviderConfig{
-							Config: &apiextv1.JSON{Raw: []byte(`{`)},
-						},
-					},
-				},
-			},
-			err: "failed to unmarshal raw config to profile configuration",
+	ok := &kcmv1.ClusterDeployment{
+		Name: "cd1", Namespace: "ns1",
+		Spec: kcmv1.ClusterDeploymentSpec{
+			ServiceSpec: kcmv1.ServiceSpec{SyncMode: string(addoncontrollerv1beta1.SyncModeContinuous)}, //nolint:staticcheck
 		},
 	}
+	if err := ClusterDeployDriftDetection(ok); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := ClusterDeployDriftDetection(tt.cd)
-			if tt.err == "" {
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				return
-			}
-			if err == nil || !strings.Contains(err.Error(), tt.err) {
-				t.Fatalf("err = %v, want error containing %q", err, tt.err)
-			}
-		})
+	bad := &kcmv1.ClusterDeployment{
+		Name: "cd1", Namespace: "ns1",
+		Spec: kcmv1.ClusterDeploymentSpec{
+			ServiceSpec: kcmv1.ServiceSpec{SyncMode: string(addoncontrollerv1beta1.SyncModeContinuousWithDriftDetection)}, //nolint:staticcheck
+		},
+	}
+	err := ClusterDeployDriftDetection(bad)
+	if err == nil || !strings.Contains(err.Error(), "SyncModeContinuousWithDriftDetection is not supported") {
+		t.Fatalf("err = %v, want error containing %q", err, "SyncModeContinuousWithDriftDetection is not supported")
 	}
 }
 

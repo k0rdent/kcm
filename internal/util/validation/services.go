@@ -27,6 +27,7 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/serviceset"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 var (
@@ -38,12 +39,20 @@ var (
 // serviceSpecDriftDetection validates that the given [github.com/K0rdent/kcm/api/v1beta1.ServiceSpec]
 // does not request the unsupported ContinuousWithDriftDetection sync mode, whether set via the
 // deprecated top-level syncMode field or via the provider-specific raw config.
+//
+// The raw config is only interpreted as Sveltos's syncMode when the spec targets the default
+// (Sveltos) state-management provider: a non-default provider's config is opaque to this
+// package and may not even be a JSON object, let alone use "syncMode" with Sveltos's meaning.
 func serviceSpecDriftDetection(spec kcmv1.ServiceSpec) error {
 	if spec.SyncMode == string(addoncontrollerv1beta1.SyncModeContinuousWithDriftDetection) { //nolint:staticcheck // SA1019: still need to catch the deprecated field until it's removed
 		return errDriftDetectionNotSupported
 	}
 
 	if spec.Provider.Config == nil {
+		return nil
+	}
+
+	if spec.Provider.Name != "" && spec.Provider.Name != kubeutil.DefaultStateManagementProvider {
 		return nil
 	}
 

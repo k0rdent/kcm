@@ -17,9 +17,12 @@ package validation
 import (
 	"testing"
 
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/stretchr/testify/require"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 func TestValidateServiceDependency(t *testing.T) {
@@ -288,6 +291,103 @@ func TestValidateServiceDependencyCycle(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
+		})
+	}
+}
+
+// TestServiceSpecDriftDetection covers serviceSpecDriftDetection directly: both
+// ClusterDeployDriftDetection and MultiClusterServiceDriftDetection are thin wrappers
+// around it, so their own tests only need to check that they forward to it correctly.
+func TestServiceSpecDriftDetection(t *testing.T) {
+	tests := []struct {
+		name string
+		spec kcmv1.ServiceSpec
+		err  string
+	}{
+		{
+			name: "no serviceSpec: success",
+		},
+		{
+			name: "top-level syncMode Continuous: success",
+			spec: kcmv1.ServiceSpec{SyncMode: string(addoncontrollerv1beta1.SyncModeContinuous)}, //nolint:staticcheck
+		},
+		{
+			name: "top-level syncMode ContinuousWithDriftDetection: error",
+			spec: kcmv1.ServiceSpec{SyncMode: string(addoncontrollerv1beta1.SyncModeContinuousWithDriftDetection)}, //nolint:staticcheck
+			err:  "SyncModeContinuousWithDriftDetection is not supported",
+		},
+		{
+			name: "provider.config without syncMode: success",
+			spec: kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{
+					Config: &apiextv1.JSON{Raw: []byte(`{"priority":1}`)},
+				},
+			},
+		},
+		{
+			name: "provider.config syncMode Continuous: success",
+			spec: kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{
+					Config: &apiextv1.JSON{Raw: []byte(`{"syncMode":"Continuous"}`)},
+				},
+			},
+		},
+		{
+			name: "provider.config syncMode ContinuousWithDriftDetection: error",
+			spec: kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{
+					Config: &apiextv1.JSON{Raw: []byte(`{"syncMode":"ContinuousWithDriftDetection"}`)},
+				},
+			},
+			err: "SyncModeContinuousWithDriftDetection is not supported",
+		},
+		{
+			name: "provider.config syncMode ContinuousWithDriftDetection, default provider name set explicitly: error",
+			spec: kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{
+					Name:   kubeutil.DefaultStateManagementProvider,
+					Config: &apiextv1.JSON{Raw: []byte(`{"syncMode":"ContinuousWithDriftDetection"}`)},
+				},
+			},
+			err: "SyncModeContinuousWithDriftDetection is not supported",
+		},
+		{
+			name: "provider.config syncMode ContinuousWithDriftDetection, non-default provider: success",
+			spec: kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{
+					Name:   "some-other-provider",
+					Config: &apiextv1.JSON{Raw: []byte(`{"syncMode":"ContinuousWithDriftDetection"}`)},
+				},
+			},
+		},
+		{
+			name: "provider.config malformed JSON, non-default provider: success",
+			spec: kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{
+					Name:   "some-other-provider",
+					Config: &apiextv1.JSON{Raw: []byte(`not-json`)},
+				},
+			},
+		},
+		{
+			name: "provider.config malformed JSON: error",
+			spec: kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{
+					Config: &apiextv1.JSON{Raw: []byte(`{`)},
+				},
+			},
+			err: "failed to unmarshal raw config to profile configuration",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := serviceSpecDriftDetection(tt.spec)
+			if tt.err == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tt.err)
 		})
 	}
 }
