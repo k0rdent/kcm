@@ -14,6 +14,14 @@
             }
           }
         },
+        "agent": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        },
         "mcpServer": {
           "type": "object",
           "properties": {

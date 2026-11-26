@@ -8,3 +8,5 @@ projectsveltos:
     enabled: false
   techsupportController:
     enabled: false
+  agent:
+    enabled: false
