@@ -17,7 +17,7 @@ spec:
       labels:
         cluster.x-k8s.io/cluster-name: {{ include "cluster.name" . }}
     spec:
-      version: {{ (split "+" .Values.k0s.version)._0  | quote }}
+      version: {{ .Values.k0s.version | quote }}
       clusterName: {{ include "cluster.name" . }}
       bootstrap:
         configRef:
