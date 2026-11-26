@@ -75,11 +75,11 @@ Build disks settings
 */}}
 {{- define "devices.disks" -}}
 {{- if .dataVolumes -}}
-{{- range .dataVolumes -}}
+{{- range .dataVolumes }}
 - disk:
     bus: virtio
   name: {{ .name }}
-{{- end -}}
+{{- end }}
 {{- else -}}
 - disk:
     bus: virtio
