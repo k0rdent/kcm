@@ -17,7 +17,8 @@ spec:
       labels:
         cluster.x-k8s.io/cluster-name: {{ include "cluster.name" . }}
     spec:
-      version: {{ regexReplaceAll "\\+k0s.+$" .Values.k0s.version ""  | quote }}
+      # keep the k0s build so build-only bumps roll workers
+      version: {{ .Values.k0s.version | quote }}
       clusterName: {{ include "cluster.name" . }}
       bootstrap:
         configRef:

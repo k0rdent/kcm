@@ -20,6 +20,7 @@ spec:
           kind: K0sWorkerConfigTemplate
           name: {{ include "k0sworkerconfigtemplate.name" . }}
       clusterName: {{ include "cluster.name" . }}
+      version: {{ .Values.k0s.version | quote }}
       infrastructureRef:
         apiGroup: infrastructure.cluster.x-k8s.io
         kind: KubevirtMachineTemplate

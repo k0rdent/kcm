@@ -559,7 +559,7 @@ kubevirt: ## Install KubeVirt and CDI on current cluster.
 .PHONY: support-bundle
 support-bundle: SUPPORT_BUNDLE_OUTPUT=$(CURDIR)/support-bundle-$(shell date +"%Y-%m-%dT%H_%M_%S_%N")
 support-bundle: envsubst support-bundle-cli ## Collect support bundle from the cluster.
-	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -no-digit -i config/support-bundle.yaml | $(SUPPORT_BUNDLE_CLI) -o $(SUPPORT_BUNDLE_OUTPUT) --debug -
+	@NAMESPACE=$(NAMESPACE) $(ENVSUBST) -no-unset -no-digit -i config/support-bundle.yaml | TROUBLESHOOT_AUTO_UPDATE=false $(SUPPORT_BUNDLE_CLI) -o $(SUPPORT_BUNDLE_OUTPUT) --debug -
 
 .PHONY: dev-aws-nuke
 dev-aws-nuke: envsubst awscli yq cloud-nuke ## Nuke AWS resources deployed by dev-mcluster-apply.
