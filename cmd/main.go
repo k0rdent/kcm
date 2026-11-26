@@ -519,6 +519,10 @@ func setupWebhooks(mgr ctrl.Manager, systemNamespace string, validateClusterUpgr
 		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterAuthentication")
 		return err
 	}
+	if err := (&kcmwebhook.MultiClusterServiceValidator{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "MultiClusterService")
+		return err
+	}
 	if err := (&kcmwebhook.ClusterAuditPolicyValidator{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "ClusterAuditPolicy")
 		return err

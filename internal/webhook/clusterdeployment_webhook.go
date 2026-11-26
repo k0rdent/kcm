@@ -69,6 +69,10 @@ func (v *ClusterDeploymentValidator) ValidateCreate(ctx context.Context, cluster
 		return admission.Warnings{"Failed to validate required providers"}, fmt.Errorf("failed to validate required providers: %w", err)
 	}
 
+	if err := validationutil.ClusterDeployReload(clusterDeployment); err != nil {
+		return admission.Warnings{"Failed to validate reload for provided ClusterDeployment"}, err
+	}
+
 	if err := validationutil.ClusterTemplateK8sCompatibility(ctx, v.Client, template, clusterDeployment); err != nil {
 		return admission.Warnings{"Failed to validate k8s version compatibility with ServiceTemplates"}, fmt.Errorf("failed to validate k8s compatibility: %w", err)
 	}
@@ -98,6 +102,19 @@ func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldClus
 	template, err := v.getClusterDeploymentTemplate(ctx, newClusterDeployment.Namespace, newTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
+	}
+
+	// Reject only a reload request newly introduced by this update, and skip the check
+	// entirely once the object is being deleted. Otherwise a ClusterDeployment that
+	// already requested the unsupported reload feature before this check shipped would
+	// become stuck - every future update to it, including the controller's own
+	// finalizer removal, would be rejected.
+	if newClusterDeployment.DeletionTimestamp.IsZero() {
+		if newErr := validationutil.ClusterDeployReload(newClusterDeployment); newErr != nil {
+			if oldErr := validationutil.ClusterDeployReload(oldClusterDeployment); oldErr == nil {
+				return admission.Warnings{"Failed to validate reload for provided ClusterDeployment"}, newErr
+			}
+		}
 	}
 
 	if oldTemplate != newTemplate {

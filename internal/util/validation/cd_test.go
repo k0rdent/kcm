@@ -20,12 +20,83 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
+
+func TestClusterDeployReload(t *testing.T) {
+	newCD := func(spec kcmv1.ServiceSpec) *kcmv1.ClusterDeployment {
+		return &kcmv1.ClusterDeployment{
+			Name: "cd1", Namespace: "ns1",
+			Spec: kcmv1.ClusterDeploymentSpec{ServiceSpec: spec},
+		}
+	}
+
+	tests := []struct {
+		name    string
+		cd      *kcmv1.ClusterDeployment
+		wantErr string
+	}{
+		{
+			name: "no serviceSpec: success",
+			cd:   newCD(kcmv1.ServiceSpec{}),
+		},
+		{
+			name: "top-level reload false: success",
+			cd:   newCD(kcmv1.ServiceSpec{Reload: false}), //nolint:staticcheck
+		},
+		{
+			name:    "top-level reload true: error",
+			cd:      newCD(kcmv1.ServiceSpec{Reload: true}), //nolint:staticcheck
+			wantErr: "reload is not supported",
+		},
+		{
+			name: "provider.config without reloader: success",
+			cd: newCD(kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{Config: &apiextv1.JSON{Raw: []byte(`{}`)}},
+			}),
+		},
+		{
+			name: "provider.config reloader false: success",
+			cd: newCD(kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{Config: &apiextv1.JSON{Raw: []byte(`{"reloader":false}`)}},
+			}),
+		},
+		{
+			name: "provider.config reloader true: error",
+			cd: newCD(kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{Config: &apiextv1.JSON{Raw: []byte(`{"reloader":true}`)}},
+			}),
+			wantErr: "reload is not supported",
+		},
+		{
+			name: "provider.config malformed JSON: error",
+			cd: newCD(kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{Config: &apiextv1.JSON{Raw: []byte(`not-json`)}},
+			}),
+			wantErr: "failed to unmarshal raw config to profile configuration",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ClusterDeployReload(tt.cd)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("err = %v, want error containing %q", err, tt.wantErr)
+			}
+		})
+	}
+}
 
 func TestClusterDeployCredential(t *testing.T) {
 	baseCD := &kcmv1.ClusterDeployment{

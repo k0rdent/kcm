@@ -16,6 +16,7 @@ package validation
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -30,7 +31,36 @@ import (
 var (
 	errServicesHaveValidTemplates = errors.New("some services have invalid templates")
 	errServicesDependency         = errors.New("some services have invalid dependencies")
+	errReloadNotSupported         = errors.New("reload is not supported")
 )
+
+// serviceSpecReload validates that the given [github.com/K0rdent/kcm/api/v1beta1.ServiceSpec]
+// does not request the unsupported reload (rolling restart on mounted ConfigMap/Secret change)
+// feature, whether set via the deprecated top-level reload field or via the provider-specific raw config.
+func serviceSpecReload(spec kcmv1.ServiceSpec) error {
+	if spec.Reload { //nolint:staticcheck // SA1019: still need to catch the deprecated field until it's removed
+		return errReloadNotSupported
+	}
+
+	if spec.Provider.Config == nil {
+		return nil
+	}
+
+	type providerConfig struct {
+		Reloader bool `json:"reloader,omitempty"`
+	}
+
+	params := new(providerConfig)
+	if err := json.Unmarshal(spec.Provider.Config.Raw, params); err != nil {
+		return fmt.Errorf("failed to unmarshal raw config to profile configuration: %w", err)
+	}
+
+	if params.Reloader {
+		return errReloadNotSupported
+	}
+
+	return nil
+}
 
 // ServicesHaveValidTemplates validates the given array of [github.com/K0rdent/kcm/api/v1beta1.Service] checking
 // if referenced [github.com/K0rdent/kcm/api/v1beta1.ServiceTemplate] is valid and is ready to be consumed.

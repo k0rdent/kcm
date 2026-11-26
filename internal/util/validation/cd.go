@@ -28,6 +28,12 @@ import (
 	schemeutil "github.com/K0rdent/kcm/internal/util/scheme"
 )
 
+// ClusterDeployReload validates that the given [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment]
+// does not request the unsupported reload feature.
+func ClusterDeployReload(cd *kcmv1.ClusterDeployment) error {
+	return serviceSpecReload(cd.Spec.ServiceSpec)
+}
+
 // ClusterDeployCredential validates a [github.com/K0rdent/kcm/api/v1beta1.Credential] object referred
 // in the given [github.com/K0rdent/kcm/api/v1beta1.ClusterDeployment] is ready and
 // supported by the given [github.com/K0rdent/kcm/api/v1beta1.ClusterTemplate].

@@ -24,6 +24,12 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
+// MultiClusterServiceReload validates that the given [github.com/K0rdent/kcm/api/v1beta1.MultiClusterService]
+// does not request the unsupported reload feature.
+func MultiClusterServiceReload(mcs *kcmv1.MultiClusterService) error {
+	return serviceSpecReload(mcs.Spec.ServiceSpec)
+}
+
 // ValidateMCSDependencyOverall calls all of the functions
 // related to MultiClusterService dependency validation one by one.
 func ValidateMCSDependencyOverall(ctx context.Context, c client.Client, mcs *kcmv1.MultiClusterService) error {
