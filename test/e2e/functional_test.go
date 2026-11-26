@@ -41,14 +41,27 @@ import (
 )
 
 const (
-	helmRepositoryName   = "k0rdent-catalog"
-	templateChainName    = "ingress-nginx"
-	nginxChartName       = "ingress-nginx"
-	openCostChartName    = "opencost"
-	openCostChartVersion = "2.3.2"
-	nginxServiceName     = "managed-ingress-nginx"
-	validatorTimeout     = 30 * time.Minute
-	validatorPoll        = 10 * time.Second
+	helmRepositoryName = "k0rdent-catalog"
+	templateChainName  = "ingress-nginx"
+	nginxChartName     = "ingress-nginx"
+	nginxServiceName   = "managed-ingress-nginx"
+	validatorTimeout   = 30 * time.Minute
+	validatorPoll      = 10 * time.Second
+
+	// The MultiClusterService release lands in the same cluster as the per-cluster
+	// one from the ClusterDeployment, so it needs its own namespace and IngressClass:
+	// IngressClass is cluster-scoped and has a fixed name, every other cluster-scoped
+	// object the chart renders is release-prefixed.
+	mcsServiceNamespace = "nginx-mcs"
+	mcsServiceValues    = `ingress-nginx:
+  controller:
+    ingressClassResource:
+      name: nginx-mcs
+      controllerValue: k8s.io/ingress-nginx-mcs
+`
+	mcsServiceValuesUpdated = mcsServiceValues + `    metrics:
+      enabled: true
+`
 )
 
 var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docker"), Ordered, ContinueOnFailure, func() {
@@ -62,7 +75,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 	)
 
 	nginxVersions := []string{"4.11.3", "4.11.5", "4.12.3", "4.13.0"}
-	multiClusterServiceTemplate := fmt.Sprintf("%s-%s", openCostChartName, strings.ReplaceAll(openCostChartVersion, ".", "-"))
+	multiClusterServiceTemplate := fmt.Sprintf("%s-%s", nginxChartName, strings.ReplaceAll(nginxVersions[len(nginxVersions)-1], ".", "-"))
 
 	BeforeAll(func() {
 		By("Creating kube client")
@@ -80,19 +93,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			URL:  "oci://ghcr.io/k0rdent/catalog/charts",
 		}
 
-		serviceTemplateSpecs = make([]kcmv1.ServiceTemplateSpec, 0)
-		serviceTemplateSpecs = append(serviceTemplateSpecs, kcmv1.ServiceTemplateSpec{
-			Helm: &kcmv1.HelmSpec{
-				ChartSpec: &sourcev1.HelmChartSpec{
-					Chart: openCostChartName,
-					SourceRef: sourcev1.LocalHelmChartSourceReference{
-						Kind: sourcev1.HelmRepositoryKind,
-						Name: helmRepositoryName,
-					},
-					Version: openCostChartVersion,
-				},
-			},
-		})
+		serviceTemplateSpecs = make([]kcmv1.ServiceTemplateSpec, 0, len(nginxVersions))
 		supportedTemplates = make([]kcmv1.SupportedTemplate, 0, len(nginxVersions))
 
 		for i := range nginxVersions {
@@ -192,7 +193,8 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			sd, deleteFn := createAndWaitCluster(ctx, kc, clusterName)
 			clusterDeleteFunc = deleteFn
 
-			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, openCostChartName, multiClusterServiceMatchLabel, multiClusterServiceName)
+			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, mcsServiceNamespace, multiClusterServiceMatchLabel, multiClusterServiceName)
+			mcs.Spec.ServiceSpec.Services[0].Values = mcsServiceValues
 			multiclusterservice.CreateMultiClusterService(ctx, kc.CrClient, mcs)
 			multiclusterservice.ValidateMultiClusterService(ctx, kc, multiClusterServiceName, 1)
 
@@ -267,7 +269,8 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 
 			clusterDeleteFunc = deleteFn
 
-			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, openCostChartName, multiClusterServiceMatchLabel, multiClusterServiceName)
+			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, mcsServiceNamespace, multiClusterServiceMatchLabel, multiClusterServiceName)
+			mcs.Spec.ServiceSpec.Services[0].Values = mcsServiceValues
 			mcsServiceSpec := mcs.Spec.ServiceSpec
 			mcs.Spec.ServiceSpec = kcmv1.ServiceSpec{}
 			multiclusterservice.CreateMultiClusterService(ctx, kc.CrClient, mcs)
@@ -311,7 +314,8 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 			waitForServiceDeployments(ctx, kc, sd, sd.Spec.ServiceSpec.Services)
 			clusterDeleteFunc = deleteFn
 
-			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, openCostChartName, multiClusterServiceMatchLabel, multiClusterServiceName)
+			mcs := multiclusterservice.BuildMultiClusterService(sd, multiClusterServiceTemplate, mcsServiceNamespace, multiClusterServiceMatchLabel, multiClusterServiceName)
+			mcs.Spec.ServiceSpec.Services[0].Values = mcsServiceValues
 			mcsServiceSpec := mcs.Spec.ServiceSpec
 			mcs.Spec.ServiceSpec = kcmv1.ServiceSpec{}
 			multiclusterservice.CreateMultiClusterService(ctx, kc.CrClient, mcs)
@@ -329,7 +333,7 @@ var _ = Describe("Functional e2e tests", Label("provider:cloud", "provider:docke
 
 			Eventually(func() error {
 				Expect(kc.CrClient.Get(ctx, crclient.ObjectKeyFromObject(mcs), mcs)).NotTo(HaveOccurred(), "failed to fetch MulticlusterService")
-				mcs.Spec.ServiceSpec.Services[0].Values = "opencost:\n            ui:\n              enabled: false"
+				mcs.Spec.ServiceSpec.Services[0].Values = mcsServiceValuesUpdated
 				Expect(kc.CrClient.Update(ctx, mcs)).NotTo(HaveOccurred())
 				return nil
 			}).WithTimeout(1 * time.Minute).WithPolling(10 * time.Second).Should(Succeed())
