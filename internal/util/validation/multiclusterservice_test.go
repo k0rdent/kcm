@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -32,62 +31,12 @@ func TestMultiClusterServiceReload(t *testing.T) {
 		}
 	}
 
-	tests := []struct {
-		name    string
-		mcs     *kcmv1.MultiClusterService
-		wantErr string
-	}{
-		{
-			name: "no serviceSpec: success",
-			mcs:  newMCS(kcmv1.ServiceSpec{}),
-		},
-		{
-			name: "top-level reload false: success",
-			mcs:  newMCS(kcmv1.ServiceSpec{Reload: false}), //nolint:staticcheck
-		},
-		{
-			name:    "top-level reload true: error",
-			mcs:     newMCS(kcmv1.ServiceSpec{Reload: true}), //nolint:staticcheck
-			wantErr: "reload is not supported",
-		},
-		{
-			name: "provider.config without reloader: success",
-			mcs: newMCS(kcmv1.ServiceSpec{
-				Provider: kcmv1.StateManagementProviderConfig{Config: &apiextv1.JSON{Raw: []byte(`{}`)}},
-			}),
-		},
-		{
-			name: "provider.config reloader false: success",
-			mcs: newMCS(kcmv1.ServiceSpec{
-				Provider: kcmv1.StateManagementProviderConfig{Config: &apiextv1.JSON{Raw: []byte(`{"reloader":false}`)}},
-			}),
-		},
-		{
-			name: "provider.config reloader true: error",
-			mcs: newMCS(kcmv1.ServiceSpec{
-				Provider: kcmv1.StateManagementProviderConfig{Config: &apiextv1.JSON{Raw: []byte(`{"reloader":true}`)}},
-			}),
-			wantErr: "reload is not supported",
-		},
-		{
-			name: "provider.config malformed JSON: error",
-			mcs: newMCS(kcmv1.ServiceSpec{
-				Provider: kcmv1.StateManagementProviderConfig{Config: &apiextv1.JSON{Raw: []byte(`not-json`)}},
-			}),
-			wantErr: "failed to unmarshal raw config to profile configuration",
-		},
-	}
+	// serviceSpecReload is covered exhaustively by TestServiceSpecReload; this only
+	// checks that MultiClusterServiceReload wires the MultiClusterService's ServiceSpec through.
+	require.NoError(t, MultiClusterServiceReload(newMCS(kcmv1.ServiceSpec{})))
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := MultiClusterServiceReload(tt.mcs)
-			if tt.wantErr == "" {
-				require.NoError(t, err)
-				return
-			}
-			require.ErrorContains(t, err, tt.wantErr)
-		})
-	}
+	err := MultiClusterServiceReload(newMCS(kcmv1.ServiceSpec{Reload: true})) //nolint:staticcheck
+	require.ErrorContains(t, err, "reload is not supported")
 }
 
 func TestValidateMCSDependency(t *testing.T) {

@@ -26,6 +26,7 @@ import (
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	"github.com/K0rdent/kcm/internal/serviceset"
+	kubeutil "github.com/K0rdent/kcm/internal/util/kube"
 )
 
 var (
@@ -37,25 +38,30 @@ var (
 // serviceSpecReload validates that the given [github.com/K0rdent/kcm/api/v1beta1.ServiceSpec]
 // does not request the unsupported reload (rolling restart on mounted ConfigMap/Secret change)
 // feature, whether set via the deprecated top-level reload field or via the provider-specific raw config.
+//
+// The raw config is only interpreted as Sveltos's reloader when the spec targets the default
+// (Sveltos) state-management provider: a non-default provider's config is opaque to this
+// package and may not even be a JSON object, let alone use "reloader" with Sveltos's meaning.
 func serviceSpecReload(spec kcmv1.ServiceSpec) error {
 	if spec.Reload { //nolint:staticcheck // SA1019: still need to catch the deprecated field until it's removed
 		return errReloadNotSupported
 	}
 
-	if spec.Provider.Config == nil {
+	if spec.Provider.Config == nil || len(spec.Provider.Config.Raw) == 0 {
 		return nil
 	}
 
-	type providerConfig struct {
-		Reloader bool `json:"reloader,omitempty"`
+	if spec.Provider.Name != "" && spec.Provider.Name != kubeutil.DefaultStateManagementProvider {
+		return nil
 	}
 
-	params := new(providerConfig)
-	if err := json.Unmarshal(spec.Provider.Config.Raw, params); err != nil {
-		return fmt.Errorf("failed to unmarshal raw config to profile configuration: %w", err)
+	var params map[string]any
+	if json.Unmarshal(spec.Provider.Config.Raw, &params) != nil {
+		// Not a JSON object: nothing for reload's "reloader" key to live in.
+		return nil //nolint:nilerr // intentionally lenient: an unparseable config isn't this function's concern
 	}
 
-	if params.Reloader {
+	if reloader, ok := params["reloader"].(bool); ok && reloader {
 		return errReloadNotSupported
 	}
 

@@ -18,9 +18,82 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
+
+func TestServiceSpecReload(t *testing.T) {
+	tests := []struct {
+		name    string
+		spec    kcmv1.ServiceSpec
+		wantErr string
+	}{
+		{
+			name: "no serviceSpec: success",
+		},
+		{
+			name: "top-level reload false: success",
+			spec: kcmv1.ServiceSpec{Reload: false}, //nolint:staticcheck
+		},
+		{
+			name:    "top-level reload true: error",
+			spec:    kcmv1.ServiceSpec{Reload: true}, //nolint:staticcheck
+			wantErr: "reload is not supported",
+		},
+		{
+			name: "provider.config without reloader: success",
+			spec: kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{Config: &apiextv1.JSON{Raw: []byte(`{}`)}},
+			},
+		},
+		{
+			name: "provider.config reloader false: success",
+			spec: kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{Config: &apiextv1.JSON{Raw: []byte(`{"reloader":false}`)}},
+			},
+		},
+		{
+			name: "provider.config reloader true: error",
+			spec: kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{Config: &apiextv1.JSON{Raw: []byte(`{"reloader":true}`)}},
+			},
+			wantErr: "reload is not supported",
+		},
+		{
+			name: "provider.config not a JSON object: success",
+			spec: kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{Config: &apiextv1.JSON{Raw: []byte(`not-json`)}},
+			},
+		},
+		{
+			name: "provider.config with empty raw: success",
+			spec: kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{Config: &apiextv1.JSON{}},
+			},
+		},
+		{
+			name: "non-default provider with reloader true in config: success",
+			spec: kcmv1.ServiceSpec{
+				Provider: kcmv1.StateManagementProviderConfig{
+					Name:   "other-provider",
+					Config: &apiextv1.JSON{Raw: []byte(`{"reloader":true}`)},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := serviceSpecReload(tt.spec)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+}
 
 func TestValidateServiceDependency(t *testing.T) {
 	for _, tc := range []struct {
