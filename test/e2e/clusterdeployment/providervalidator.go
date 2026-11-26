@@ -89,18 +89,20 @@ func NewProviderValidator(templateType templates.Type, clusterName string, actio
 	}
 
 	if action == ValidationActionDeploy {
+		// the defaults cover the k0s templates; the managed and adopted ones below replace them
 		resourcesToValidate = map[string]resourceValidationFunc{
-			"clusters":       validateCluster,
-			"machines":       validateMachines,
-			"control-planes": validateK0sControlPlanes,
-			"csi-driver":     validateCSIDriver,
+			"clusters":         validateCluster,
+			"machines":         validateMachines,
+			"workers-uptodate": validateWorkerMachinesUpToDate,
+			"control-planes":   validateK0sControlPlanes,
+			"csi-driver":       validateCSIDriver,
 		}
 
 		if templateType.IsHosted() {
 			resourcesToValidate["control-planes"] = validateK0smotronControlPlanes
 		}
 
-		resourceOrder = []string{"clusters", "machines", "control-planes", "csi-driver"}
+		resourceOrder = []string{"clusters", "machines", "workers-uptodate", "control-planes", "csi-driver"}
 
 		switch templateType {
 		case templates.TemplateVSphereStandaloneCP, templates.TemplateVSphereHostedCP:

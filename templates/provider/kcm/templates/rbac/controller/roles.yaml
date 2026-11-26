@@ -233,6 +233,21 @@ rules:
   resources:
   - machines
   verbs: {{ include "rbac.viewerVerbs" . | nindent 4 }}
+# TODO(KLUDGE): DELETE the next two rules together with the k0s worker UpToDate kludge
+# (internal/controller/clusterdeployment_k0s_uptodate.go) once Cluster API reports k0s workers
+# as up to date by itself. Track https://github.com/kubernetes-sigs/cluster-api/issues/14086
+- apiGroups:
+  - cluster.x-k8s.io
+  resources:
+  - machines/status
+  verbs:
+  - patch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingadmissionpolicies
+  verbs:
+  - get
 - apiGroups:
   - ""
   resources:
