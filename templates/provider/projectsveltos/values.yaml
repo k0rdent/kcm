@@ -1,12 +1,69 @@
-# Disable all optional components.
+# Disable all optional components, and run what is left on images built from
+# source at https://github.com/josef-hak/sveltos-images rather than on
+# docker.io/projectsveltos.
+#
+# The registry is set per component and deliberately not as `global.registry`:
+# that value is also what the chart passes as `--registry` to addon-controller
+# and classifier-manager, and that argument is how those two name the
+# drift-detection-manager image they deploy into a managed cluster for a
+# ClusterProfile in ContinuousWithDriftDetection mode. There are no public
+# sources for that one, so it has to keep coming from docker.io.
+#
+# Disabling `agent` takes away the other image that cannot be built,
+# sveltos-agent -- and with it event-manager and hc-manager, which the chart
+# only deploys alongside it. techsupport and mcp-server are the same case.
+# access-manager and shard-controller can be built, and carry a registry here
+# even though they are off, so that turning either back on does not quietly
+# reintroduce an upstream image.
 projectsveltos:
   accessManager:
     enabled: false
+    manager:
+      image:
+        registry: ghcr.io/josef-hak
   shardController:
     enabled: false
+    manager:
+      image:
+        registry: ghcr.io/josef-hak
   mcpServer:
     enabled: false
   techsupportController:
     enabled: false
   agent:
     enabled: false
+  addonController:
+    initialization:
+      image:
+        registry: ghcr.io/josef-hak
+    controller:
+      image:
+        registry: ghcr.io/josef-hak
+  classifierManager:
+    manager:
+      image:
+        registry: ghcr.io/josef-hak
+  clusterInventory:
+    manager:
+      image:
+        registry: ghcr.io/josef-hak
+  eventManager:
+    manager:
+      image:
+        registry: ghcr.io/josef-hak
+  hcManager:
+    manager:
+      image:
+        registry: ghcr.io/josef-hak
+  crdManagerJob:
+    crdManager:
+      image:
+        registry: ghcr.io/josef-hak
+  registerMgmtClusterJob:
+    registerMgmtCluster:
+      image:
+        registry: ghcr.io/josef-hak
+  scManager:
+    manager:
+      image:
+        registry: ghcr.io/josef-hak
