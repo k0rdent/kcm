@@ -2,7 +2,7 @@ apiVersion: v2
 name: projectsveltos
 description: A Helm chart to refer the official projectsveltos helm chart
 type: application
-version: 1.17.0
+version: 1.17.1
 appVersion: "v1.17.0"
 dependencies:
   - name: sveltos-crds
