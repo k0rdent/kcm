@@ -19,7 +19,8 @@ spec:
           kind: K0sWorkerConfigTemplate
           name: {{ include "k0sworkerconfigtemplate.name" . }}
       clusterName: {{ include "cluster.name" . }}
-      version: {{ (split "+" .Values.k0s.version)._0  | quote }}
+      # bare version: capd derives the kindest/node image tag from it
+      version: {{ (split "+" .Values.k0s.version)._0 | quote }}
       infrastructureRef:
         apiGroup: infrastructure.cluster.x-k8s.io
         kind: DevMachineTemplate
