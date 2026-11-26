@@ -66,6 +66,12 @@ telemetry: # @schema type: object; description: Telemetry collection configurati
         labels: {} # @schema description: Labels (map) to be set; type: object; additionalProperties: true
         nodeAffinity: {} # @schema type: object; additionalProperties: true; description: Node affinity settings if in multi-node environment
 
+# TODO(KLUDGE): DELETE once Cluster API reports k0s workers as up to date by itself.
+# Track https://github.com/kubernetes-sigs/cluster-api/issues/14086
+# Temporary KCM-only kludge, NOT supported or recommended by the Cluster API community.
+k0sWorkerUpToDatePolicy: # @schema type: object; description: TEMPORARY KLUDGE, to be removed once https://github.com/kubernetes-sigs/cluster-api/issues/14086 is fixed. Works around Cluster API reporting k0s workers as not up to date forever because their kubelet version lacks the k0s build number; additionalProperties: false
+  enabled: true # @schema type: boolean; description: Installs a MutatingAdmissionPolicy that reports k0s MachineDeployment workers up to date when their kubelet differs from the requested version only by the k0s build. Rendered only on clusters serving admissionregistration.k8s.io/v1 MutatingAdmissionPolicy (Kubernetes 1.36+)
+
 cert-manager:
   enabled: true
   crds:

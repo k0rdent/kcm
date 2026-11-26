@@ -24,12 +24,14 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 
+	statusutil "github.com/K0rdent/kcm/internal/util/status"
 	"github.com/K0rdent/kcm/test/e2e/kubeclient"
 	validationutil "github.com/K0rdent/kcm/test/util/validation"
 )
@@ -72,6 +74,34 @@ func validateCluster(ctx context.Context, kc *kubeclient.KubeClient, clusterName
 		clusterapiv1.ClusterControlPlaneMachinesReadyCondition,
 		clusterapiv1.ClusterWorkerMachinesReadyReason,
 	)
+}
+
+// validateWorkerMachinesUpToDate checks that Cluster API reports the k0s workers as up to date.
+//
+// KEEP THIS VALIDATION when removing the k0s worker UpToDate kludge
+// (templates/provider/kcm-regional/files/k0s-worker-uptodate-policy.yaml): it guards against
+// https://github.com/kubernetes-sigs/cluster-api/issues/14086 coming back, whether it is
+// worked around by KCM or fixed upstream.
+func validateWorkerMachinesUpToDate(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
+	cluster, err := kc.GetCluster(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	conditions, err := statusutil.ConditionsFromUnstructured(cluster)
+	if err != nil {
+		return err
+	}
+
+	// unlike ValidateConditionsTrue, a missing condition fails: a passed validation is not run again
+	c := apimeta.FindStatusCondition(conditions, clusterapiv1.ClusterWorkerMachinesUpToDateCondition)
+	switch {
+	case c == nil:
+		return fmt.Errorf("cluster %s has no %s condition yet", cluster.GetName(), clusterapiv1.ClusterWorkerMachinesUpToDateCondition)
+	case c.Status != metav1.ConditionTrue:
+		return fmt.Errorf("cluster %s workers are not up to date: %s", cluster.GetName(), validationutil.ConvertConditionsToString(*c))
+	}
+	return nil
 }
 
 func validateMachines(ctx context.Context, kc *kubeclient.KubeClient, clusterName string) error {
