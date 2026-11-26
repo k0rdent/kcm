@@ -65,14 +65,17 @@ data:
       version: v1
       kind: DaemonSet
       scope: Namespaced
+      # Counters are defaulted rather than required: Kubernetes omits
+      # updatedNumberScheduled when it is zero, so a DaemonSet with no
+      # schedulable nodes (desiredNumberScheduled == 0) reports healthy
+      # instead of never passing.
       healthy: |
         has(obj.status.observedGeneration) &&
         int(obj.status.observedGeneration) >= int(obj.metadata.generation) &&
-        has(obj.status.desiredNumberScheduled) &&
-        has(obj.status.numberReady) &&
-        has(obj.status.updatedNumberScheduled) &&
-        int(obj.status.desiredNumberScheduled) == int(obj.status.numberReady) &&
-        int(obj.status.desiredNumberScheduled) == int(obj.status.updatedNumberScheduled)
+        int(has(obj.status.desiredNumberScheduled) ? obj.status.desiredNumberScheduled : 0) ==
+          int(has(obj.status.numberReady) ? obj.status.numberReady : 0) &&
+        int(has(obj.status.desiredNumberScheduled) ? obj.status.desiredNumberScheduled : 0) ==
+          int(has(obj.status.updatedNumberScheduled) ? obj.status.updatedNumberScheduled : 0)
       message: |
         string(int(has(obj.status.numberReady) ? obj.status.numberReady : 0)) + "/" +
         string(int(has(obj.status.desiredNumberScheduled) ? obj.status.desiredNumberScheduled : 0)) +

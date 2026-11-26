@@ -91,11 +91,10 @@ const testRulesYAML = `
   healthy: |
     has(obj.status.observedGeneration) &&
     int(obj.status.observedGeneration) >= int(obj.metadata.generation) &&
-    has(obj.status.desiredNumberScheduled) &&
-    has(obj.status.numberReady) &&
-    has(obj.status.updatedNumberScheduled) &&
-    int(obj.status.desiredNumberScheduled) == int(obj.status.numberReady) &&
-    int(obj.status.desiredNumberScheduled) == int(obj.status.updatedNumberScheduled)
+    int(has(obj.status.desiredNumberScheduled) ? obj.status.desiredNumberScheduled : 0) ==
+      int(has(obj.status.numberReady) ? obj.status.numberReady : 0) &&
+    int(has(obj.status.desiredNumberScheduled) ? obj.status.desiredNumberScheduled : 0) ==
+      int(has(obj.status.updatedNumberScheduled) ? obj.status.updatedNumberScheduled : 0)
   message: |
     string(int(has(obj.status.numberReady) ? obj.status.numberReady : 0)) + "/" +
     string(int(has(obj.status.desiredNumberScheduled) ? obj.status.desiredNumberScheduled : 0)) +
@@ -347,6 +346,31 @@ func TestRule_DaemonSet(t *testing.T) {
 					"desiredNumberScheduled": int64(3),
 					"numberReady":            int64(2),
 					"updatedNumberScheduled": int64(3),
+				},
+			},
+			wantHealthy: false,
+		},
+		{
+			// Kubernetes omits the zero-valued updatedNumberScheduled.
+			name: "no schedulable nodes",
+			payload: map[string]any{
+				"metadata": map[string]any{"generation": int64(1)},
+				"status": map[string]any{
+					"observedGeneration":     int64(1),
+					"desiredNumberScheduled": int64(0),
+					"numberReady":            int64(0),
+				},
+			},
+			wantHealthy: true,
+		},
+		{
+			name: "rollout not started",
+			payload: map[string]any{
+				"metadata": map[string]any{"generation": int64(2)},
+				"status": map[string]any{
+					"observedGeneration":     int64(2),
+					"desiredNumberScheduled": int64(3),
+					"numberReady":            int64(3),
 				},
 			},
 			wantHealthy: false,
