@@ -122,13 +122,6 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 		return ctrl.Result{}, err
 	}
 
-	if r.validateServiceSpecDriftDetection(ctx, mcs) {
-		// Reconciliation is requeued via updateStatus's unconditional requeue-on-no-change
-		// (nothing here changes the condition on repeat runs), not by this return value;
-		// there is nothing to do until the spec itself changes.
-		return ctrl.Result{}, nil
-	}
-
 	l.Info("Validating service templates")
 	if err := validationutil.ServicesHaveValidTemplates(ctx, r.Client, mcs.Spec.ServiceSpec.Services, r.SystemNamespace); err != nil {
 		if r.setCondition(mcs, kcmv1.ServicesReferencesValidationCondition, err) {
@@ -301,36 +294,6 @@ func (r *MultiClusterServiceReconciler) reconcileUpdate(ctx context.Context, mcs
 	mcs.Status.ServicesUpgradePaths = upgradePaths
 
 	return result, errors.Join(servicesErr, clustersErr)
-}
-
-// validateServiceSpecDriftDetection validates that mcs.Spec.ServiceSpec does not request the
-// unsupported ContinuousWithDriftDetection sync mode, sets the corresponding condition, and
-// returns true if reconciliation should stop here.
-//
-// Unlike ClusterDeployment - where a validating webhook rejects the sync mode only on
-// create/update and an already-existing ClusterDeployment keeps reconciling untouched -
-// MultiClusterService has no validating webhook, so this is the only place that can catch
-// it. As a result, a MultiClusterService that already requested
-// ContinuousWithDriftDetection before this check shipped will stop progressing (services
-// already deployed keep running, but no further changes are reconciled) until its
-// syncMode is switched to Continuous. This is intentional: Sveltos's drift-detection
-// manager is no longer bundled (#3215), so continuing to reconcile such a spec would
-// silently stop providing drift detection while still claiming to. Operators upgrading
-// from a release predating this check must switch any ContinuousWithDriftDetection
-// MultiClusterService to Continuous before upgrading.
-func (r *MultiClusterServiceReconciler) validateServiceSpecDriftDetection(ctx context.Context, mcs *kcmv1.MultiClusterService) bool {
-	l := ctrl.LoggerFrom(ctx)
-
-	l.Info("Validating serviceSpec drift detection sync mode")
-	if err := validationutil.MultiClusterServiceDriftDetection(mcs); err != nil {
-		if r.setCondition(mcs, kcmv1.ServiceSpecDriftDetectionValidationCondition, err) {
-			record.Warnf(mcs, nil, kcmv1.ServiceSpecDriftDetectionValidationCondition, "ValidateServiceSpecDriftDetection", err.Error())
-		}
-		l.Error(err, "failed to validate serviceSpec drift detection sync mode, reconciliation will not proceed until the spec is changed")
-		return true
-	}
-	r.setCondition(mcs, kcmv1.ServiceSpecDriftDetectionValidationCondition, nil)
-	return false
 }
 
 // setClustersCondition updates MultiClusterService's condition which shows number of clusters where services were
