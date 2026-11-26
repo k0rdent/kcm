@@ -1,9 +1,9 @@
 dependencies:
 - name: sveltos-crds
   repository: https://projectsveltos.github.io/helm-charts
-  version: 1.17.0
+  version: 1.18.0
 - name: projectsveltos
   repository: https://projectsveltos.github.io/helm-charts
-  version: 1.17.0
-digest: sha256:e9a7466bba3d3ecb3b7a085ef0cb05cc475960a2e8a1bff4867176a4189aa3ce
-generated: "2026-11-04T00:01:31.875697-05:00"
+  version: 1.18.0
+digest: sha256:c7d990835d4e9122e2d4197b69ece391c51b960d1e57cf99bbc00a4cbd0cc8a2
+generated: "2026-11-26T11:54:08.924576648Z"
