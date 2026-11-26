@@ -1154,7 +1154,6 @@ func StateManagementProviderConfigFromServiceSpec(serviceSpec kcmv1.ServiceSpec)
 		DriftExclusions      []libsveltosv1beta1.DriftExclusion           `json:"driftExclusions,omitempty"`
 		Priority             int32                                        `json:"priority,omitempty"`
 		StopOnConflict       bool                                         `json:"stopOnConflict,omitempty"`
-		Reload               bool                                         `json:"reloader,omitempty"`
 		ContinueOnError      bool                                         `json:"continueOnError,omitempty"`
 	}
 
@@ -1171,7 +1170,6 @@ func StateManagementProviderConfigFromServiceSpec(serviceSpec kcmv1.ServiceSpec)
 		DriftExclusions:      serviceSpec.DriftExclusions,
 		Priority:             serviceSpec.Priority,
 		StopOnConflict:       serviceSpec.StopOnConflict,
-		Reload:               serviceSpec.Reload,
 		ContinueOnError:      serviceSpec.ContinueOnError,
 	}
 

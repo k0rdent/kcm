@@ -27,6 +27,26 @@ import (
 	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
 
+func TestClusterDeployReload(t *testing.T) {
+	newCD := func(spec kcmv1.ServiceSpec) *kcmv1.ClusterDeployment {
+		return &kcmv1.ClusterDeployment{
+			Name: "cd1", Namespace: "ns1",
+			Spec: kcmv1.ClusterDeploymentSpec{ServiceSpec: spec},
+		}
+	}
+
+	// serviceSpecReload is covered exhaustively by TestServiceSpecReload; this only
+	// checks that ClusterDeployReload wires the ClusterDeployment's ServiceSpec through.
+	if err := ClusterDeployReload(newCD(kcmv1.ServiceSpec{})); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	err := ClusterDeployReload(newCD(kcmv1.ServiceSpec{Reload: true})) //nolint:staticcheck
+	if err == nil || !strings.Contains(err.Error(), "reload is not supported") {
+		t.Fatalf("err = %v, want error containing %q", err, "reload is not supported")
+	}
+}
+
 func TestClusterDeployCredential(t *testing.T) {
 	baseCD := &kcmv1.ClusterDeployment{
 		Name: "cd1", Namespace: "ns1",

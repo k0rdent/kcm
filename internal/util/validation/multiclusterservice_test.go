@@ -24,6 +24,21 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
 
+func TestMultiClusterServiceReload(t *testing.T) {
+	newMCS := func(spec kcmv1.ServiceSpec) *kcmv1.MultiClusterService {
+		return &kcmv1.MultiClusterService{
+			Spec: kcmv1.MultiClusterServiceSpec{ServiceSpec: spec},
+		}
+	}
+
+	// serviceSpecReload is covered exhaustively by TestServiceSpecReload; this only
+	// checks that MultiClusterServiceReload wires the MultiClusterService's ServiceSpec through.
+	require.NoError(t, MultiClusterServiceReload(newMCS(kcmv1.ServiceSpec{})))
+
+	err := MultiClusterServiceReload(newMCS(kcmv1.ServiceSpec{Reload: true})) //nolint:staticcheck
+	require.ErrorContains(t, err, "reload is not supported")
+}
+
 func TestValidateMCSDependency(t *testing.T) {
 	for _, tc := range []struct {
 		testName    string

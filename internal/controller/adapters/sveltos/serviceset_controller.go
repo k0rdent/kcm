@@ -99,7 +99,6 @@ type profileConfig struct {
 	Patches              []libsveltosv1beta1.Patch                    `json:"patches,omitempty"`
 	PatchesFrom          []addoncontrollerv1beta1.ValueFrom           `json:"patchesFrom,omitempty"`
 	ContinueOnError      bool                                         `json:"continueOnError,omitempty"`
-	Reloader             bool                                         `json:"reloader,omitempty"`
 	StopOnConflict       bool                                         `json:"stopOnConflict,omitempty"`
 }
 
@@ -1584,7 +1583,10 @@ func buildProfileSpec(config *apiextv1.JSON) (*addoncontrollerv1beta1.Spec, erro
 	spec.SyncMode = addoncontrollerv1beta1.SyncMode(params.SyncMode)
 	spec.ContinueOnConflict = !params.StopOnConflict
 	spec.ContinueOnError = params.ContinueOnError
-	spec.Reloader = params.Reloader
+	// spec.Reloader is intentionally left unset: reload is rejected at admission
+	// (see internal/util/validation), but a ServiceSet built from a ClusterDeployment
+	// or MultiClusterService that requested it before that validation existed must
+	// not actually enable it here.
 	spec.TemplateResourceRefs = params.TemplateResourceRefs
 	spec.PolicyRefs = params.PolicyRefs
 	spec.Patches = params.Patches

@@ -221,6 +221,24 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			},
 		},
 		{
+			name: "should fail if serviceSpec.reload is true",
+			ClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+				clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{Reload: true}), //nolint:staticcheck
+			),
+			existingObjects: []runtime.Object{
+				mgmt, cred, providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithProvidersStatus("infrastructure-aws", "control-plane-k0smotron", "bootstrap-k0smotron"),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+				),
+			},
+			warnings: admission.Warnings{"Failed to validate reload for provided ClusterDeployment"},
+			err:      "reload is not supported",
+		},
+		{
 			name: "should fail if the ServiceTemplates are not found in same namespace",
 			ClusterDeployment: clusterdeployment.NewClusterDeployment(
 				clusterdeployment.WithClusterTemplate(testTemplateName),
@@ -515,6 +533,91 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 				),
 			},
 			err: fmt.Sprintf("the ClusterDeployment is invalid: the ClusterTemplate %s/%s is invalid with the error: validation error example", metav1.NamespaceDefault, newTemplateName),
+		},
+		{
+			name: "should fail if serviceSpec.reload is updated to true",
+			oldClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			newClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+				clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{Reload: true}), //nolint:staticcheck
+			),
+			existingObjects: []runtime.Object{
+				mgmt, cred, providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithProvidersStatus("infrastructure-aws", "control-plane-k0smotron", "bootstrap-k0smotron"),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+				),
+			},
+			warnings: admission.Warnings{"Failed to validate reload for provided ClusterDeployment"},
+			err:      "reload is not supported",
+		},
+		{
+			// A ClusterDeployment created before this validation shipped must stay
+			// editable: an update unrelated to reload must not be rejected just
+			// because the (pre-existing) reload is unsupported.
+			name: "should not fail when reload was already true and the update only adds a label",
+			oldClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+				clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{Reload: true}), //nolint:staticcheck
+			),
+			newClusterDeployment: func() *kcmv1.ClusterDeployment {
+				cd := clusterdeployment.NewClusterDeployment(
+					clusterdeployment.WithClusterTemplate(testTemplateName),
+					clusterdeployment.WithCredential(testCredentialName),
+					clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{Reload: true}), //nolint:staticcheck
+				)
+				cd.Labels = map[string]string{"foo": "bar"}
+				return cd
+			}(),
+			existingObjects: []runtime.Object{
+				mgmt, cred, providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithProvidersStatus("infrastructure-aws", "control-plane-k0smotron", "bootstrap-k0smotron"),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+				),
+			},
+		},
+		{
+			// The controller itself updates the object as part of tearing it down
+			// (e.g. to remove its finalizer); that update must not be rejected
+			// because of reload set before this validation shipped.
+			name: "should not fail when reload is true and the object is being deleted",
+			oldClusterDeployment: func() *kcmv1.ClusterDeployment {
+				cd := clusterdeployment.NewClusterDeployment(
+					clusterdeployment.WithClusterTemplate(testTemplateName),
+					clusterdeployment.WithCredential(testCredentialName),
+					clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{Reload: true}), //nolint:staticcheck
+				)
+				now := metav1.Now()
+				cd.DeletionTimestamp = &now
+				cd.Finalizers = []string{"some.finalizer/kcm"}
+				return cd
+			}(),
+			newClusterDeployment: func() *kcmv1.ClusterDeployment {
+				cd := clusterdeployment.NewClusterDeployment(
+					clusterdeployment.WithClusterTemplate(testTemplateName),
+					clusterdeployment.WithCredential(testCredentialName),
+					clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{Reload: true}), //nolint:staticcheck
+				)
+				now := metav1.Now()
+				cd.DeletionTimestamp = &now
+				return cd
+			}(),
+			existingObjects: []runtime.Object{
+				mgmt, cred, providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithProvidersStatus("infrastructure-aws", "control-plane-k0smotron", "bootstrap-k0smotron"),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+				),
+			},
 		},
 		{
 			name: "update spec.template: should fail if the template is not in the list of available",
