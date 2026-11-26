@@ -27,10 +27,11 @@ fi
 
 echo "Installing KubeVirt ${KUBEVIRT_VERSION}"
 echo "Installing Containerized Data Importer ${CDI_VERSION}"
-"${KUBECTL_BIN}" apply -f "https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-operator.yaml"
-"${KUBECTL_BIN}" apply -f "https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-cr.yaml"
-"${KUBECTL_BIN}" apply -f "https://github.com/kubevirt/containerized-data-importer/releases/download/${CDI_VERSION}/cdi-operator.yaml"
-"${KUBECTL_BIN}" apply -f "https://github.com/kubevirt/containerized-data-importer/releases/download/${CDI_VERSION}/cdi-cr.yaml"
+# server-side apply: kubevirts.kubevirt.io CRD exceeds the 256KiB last-applied-configuration annotation limit
+"${KUBECTL_BIN}" apply --server-side -f "https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-operator.yaml"
+"${KUBECTL_BIN}" apply --server-side -f "https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-cr.yaml"
+"${KUBECTL_BIN}" apply --server-side -f "https://github.com/kubevirt/containerized-data-importer/releases/download/${CDI_VERSION}/cdi-operator.yaml"
+"${KUBECTL_BIN}" apply --server-side -f "https://github.com/kubevirt/containerized-data-importer/releases/download/${CDI_VERSION}/cdi-cr.yaml"
 
 echo "Waiting for CRD kubevirts.kubevirt.io to be created..."
 until "${KUBECTL_BIN}" get crd kubevirts.kubevirt.io >/dev/null 2>&1; do sleep 2; done
