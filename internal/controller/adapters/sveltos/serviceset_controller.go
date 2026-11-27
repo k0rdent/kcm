@@ -520,6 +520,21 @@ func (r *ServiceSetReconciler) reconcileDelete(ctx context.Context, rgnClient cl
 	// if error is nil, it means that the Profile was found and we need
 	// to initiate the deletion of the Profile or wait for it to be deleted.
 	if err == nil {
+		// Sveltos skips a paused Profile entirely, its finalizer included, so a
+		// Profile left paused outlives the ServiceSet, and the ClusterDeployment
+		// waiting on that ServiceSet never finishes deleting. The pause holds
+		// reconciliation of the services, not the removal of the Profile itself.
+		if annotations := profile.GetAnnotations(); annotations != nil {
+			if _, paused := annotations[addoncontrollerv1beta1.ProfilePausedAnnotation]; paused {
+				l.Info("Unpausing Profile so that it can be deleted", "profile", profile.GetName())
+				delete(annotations, addoncontrollerv1beta1.ProfilePausedAnnotation)
+				profile.SetAnnotations(annotations)
+				if err = rgnClient.Update(ctx, profile); err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to unpause Profile: %w", err)
+				}
+			}
+		}
+
 		if profile.GetDeletionTimestamp().IsZero() {
 			l.Info("Deleting Profile", "profile", profile.GetName())
 			if err = rgnClient.Delete(ctx, profile); err != nil {
