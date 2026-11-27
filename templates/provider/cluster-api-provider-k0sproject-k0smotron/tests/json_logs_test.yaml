@@ -1,0 +1,56 @@
+suite: k0smotron providers JSON logs
+templates:
+  - templates/providers.yaml
+
+tests:
+  - it: "sets the JSON zap encoder on all providers by default"
+    asserts:
+      - equal:
+          path: spec.manager.additionalArgs
+          value:
+            --zap-encoder: json
+            --zap-time-encoding: iso8601
+
+  - it: "keeps user-provided additional args and zap settings"
+    set:
+      infrastructure.manager.additionalArgs:
+        --zap-encoder: console
+      bootstrap.manager.additionalArgs:
+        --zap-time-encoding: epoch
+      controlPlane.manager.additionalArgs:
+        --foo: bar
+    asserts:
+      - equal:
+          path: spec.manager.additionalArgs
+          value:
+            --zap-encoder: console
+            --zap-time-encoding: iso8601
+        documentSelector:
+          path: kind
+          value: InfrastructureProvider
+      - equal:
+          path: spec.manager.additionalArgs
+          value:
+            --zap-encoder: json
+            --zap-time-encoding: epoch
+        documentSelector:
+          path: kind
+          value: BootstrapProvider
+      - equal:
+          path: spec.manager.additionalArgs
+          value:
+            --zap-encoder: json
+            --zap-time-encoding: iso8601
+            --foo: bar
+        documentSelector:
+          path: kind
+          value: ControlPlaneProvider
+
+  - it: "adds the KOF log-discovery annotations for the zap JSON format on all providers"
+    asserts:
+      - matchRegex:
+          path: spec.patches[0].patch
+          pattern: 'io\.opentelemetry\.discovery\.logs\.manager/enabled: "true"'
+      - matchRegex:
+          path: spec.patches[0].patch
+          pattern: 'layout: "2006-01-02T15:04:05\.000Z0700"\s+severity:\s+parse_from: attributes\.level'

@@ -5,9 +5,8 @@ templates:
 tests:
   - it: "keeps manager untouched when in-place updates are disabled"
     asserts:
-      - equal:
-          path: spec.manager
-          value: {}
+      - notExists:
+          path: spec.manager.featureGates
 
   - it: "enables InPlaceUpdates and RuntimeSDK feature gates"
     set:
@@ -31,6 +30,8 @@ tests:
           path: spec.manager
           value:
             verbosity: 5
+            additionalArgs:
+              --logging-format: json
             featureGates:
               ClusterTopology: true
               InPlaceUpdates: false
@@ -68,6 +69,5 @@ tests:
       global.enableInPlaceUpdates: true
       inPlaceUpdates.enabled: false
     asserts:
-      - equal:
-          path: spec.manager
-          value: {}
+      - notExists:
+          path: spec.manager.featureGates

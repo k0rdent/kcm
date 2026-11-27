@@ -1,0 +1,46 @@
+suite: Cluster API core provider JSON logs
+templates:
+  - templates/provider.yaml
+
+tests:
+  - it: "sets the JSON logging format by default"
+    asserts:
+      - equal:
+          path: spec.manager.additionalArgs
+          value:
+            --logging-format: json
+
+  - it: "keeps user-provided additional args and logging format"
+    set:
+      manager.additionalArgs:
+        --logging-format: text
+        --foo: bar
+    asserts:
+      - equal:
+          path: spec.manager.additionalArgs
+          value:
+            --logging-format: text
+            --foo: bar
+
+  - it: "adds the KOF log-discovery annotations for the klog JSON format"
+    asserts:
+      - matchRegex:
+          path: spec.patches[0].patch
+          pattern: 'io\.opentelemetry\.discovery\.logs\.manager/enabled: "true"'
+      - matchRegex:
+          path: spec.patches[0].patch
+          pattern: 'parse_from: attributes\.ts\s+layout_type: epoch\s+layout: ms'
+
+  - it: "keeps user-provided patches before the default ones"
+    set:
+      patches:
+        - patch: "{}"
+          target:
+            kind: Deployment
+    asserts:
+      - equal:
+          path: spec.patches[0].patch
+          value: "{}"
+      - matchRegex:
+          path: spec.patches[1].patch
+          pattern: io\.opentelemetry\.discovery\.logs\.manager/config

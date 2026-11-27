@@ -9,9 +9,8 @@ tests:
       - hasDocuments:
           count: 0
         template: templates/extension-webhook.yaml
-      - equal:
-          path: spec.manager
-          value: {}
+      - notExists:
+          path: spec.manager.featureGates
         template: templates/providers.yaml
 
   - it: "enables InPlaceUpdates feature gate on the controlplane provider only"
@@ -26,15 +25,13 @@ tests:
         documentSelector:
           path: kind
           value: ControlPlaneProvider
-      - equal:
-          path: spec.manager
-          value: {}
+      - notExists:
+          path: spec.manager.featureGates
         documentSelector:
           path: kind
           value: BootstrapProvider
-      - equal:
-          path: spec.manager
-          value: {}
+      - notExists:
+          path: spec.manager.featureGates
         documentSelector:
           path: kind
           value: InfrastructureProvider
@@ -200,9 +197,8 @@ tests:
       - hasDocuments:
           count: 0
         template: templates/extension-webhook.yaml
-      - equal:
-          path: spec.manager
-          value: {}
+      - notExists:
+          path: spec.manager.featureGates
         template: templates/providers.yaml
         documentSelector:
           path: kind

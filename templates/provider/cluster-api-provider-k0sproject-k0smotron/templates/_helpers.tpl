@@ -277,6 +277,23 @@ Build default provider patches
     kind: Deployment
     namespace: {{ .Release.Namespace }}
 {{- end }}
+{{- with (include "provider.logDiscoveryConfig" . | trim) }}
+- patch: |
+    apiVersion: apps/v1
+    kind: Deployment
+    spec:
+      template:
+        metadata:
+          annotations:
+            io.opentelemetry.discovery.logs.manager/enabled: "true"
+            io.opentelemetry.discovery.logs.manager/config: |
+              {{- . | nindent 14 }}
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    namespace: {{ $.Release.Namespace }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -339,7 +356,7 @@ InPlaceVersionWithDeleteFirst: true
 {{- end }}
 
 {{/*
-Control plane provider manager settings with the default feature gates, user-provided feature gates take precedence
+Control plane provider manager settings with the default feature gates and JSON logging, user-provided feature gates and additional args take precedence
 */}}
 {{- define "controlPlaneProvider.manager" -}}
 {{- $controlPlane := .Values.controlPlane | default dict -}}
@@ -354,6 +371,21 @@ Control plane provider manager settings with the default feature gates, user-pro
 {{- end -}}
 {{- $_ := set $manager "featureGates" $featureGates -}}
 {{- end -}}
+{{- include "provider.manager.jsonLogs" $manager | fromYaml | toYaml -}}
+{{- end }}
+
+{{/*
+Manager settings with JSON logging enabled, user-provided additional args take precedence
+*/}}
+{{- define "provider.manager.jsonLogs" -}}
+{{- $manager := deepCopy (. | default dict) -}}
+{{- $additionalArgs := $manager.additionalArgs | default dict -}}
+{{- range $arg, $value := dict "--zap-encoder" "json" "--zap-time-encoding" "iso8601" -}}
+{{- if not (hasKey $additionalArgs $arg) -}}
+{{- $_ := set $additionalArgs $arg $value -}}
+{{- end -}}
+{{- end -}}
+{{- $_ := set $manager "additionalArgs" $additionalArgs -}}
 {{- toYaml $manager -}}
 {{- end }}
 
@@ -433,4 +465,32 @@ Whether the in-place version update combined with the delete-first strategy is e
 {{- else -}}
 {{- $global.enableInPlaceVersionWithDeleteFirst | default false -}}
 {{- end -}}
+{{- end }}
+
+{{/*
+KOF log-discovery config for the manager container, which writes zap JSON
+(--zap-encoder=json --zap-time-encoding=iso8601): ISO 8601 time in ts and level name in level
+*/}}
+{{- define "provider.logDiscoveryConfig" -}}
+operators:
+  - id: container-parser
+    type: container
+    max_log_size: 102400
+  - id: json-parser
+    type: json_parser
+    if: body matches "^\\s*\\{"
+    parse_from: body
+    parse_to: attributes
+    on_error: send_quiet
+    timestamp:
+      parse_from: attributes.ts
+      layout_type: gotime
+      layout: "2006-01-02T15:04:05.000Z0700"
+    severity:
+      parse_from: attributes.level
+  - id: log-level
+    type: add
+    if: 'type(attributes.level) == "string"'
+    field: attributes.log_level
+    value: EXPR(lower(attributes.level))
 {{- end }}
