@@ -16,6 +16,15 @@ on:
       - 'config/**'
       - '**.md'
 
+  # Nightly on main, docker only. CAPD builds the workload cluster out of
+  # containers on the runner and the Credential the suite applies is a stub, so
+  # there is no secret to protect and no cloud spend to authorize: the label and
+  # the approval that the cloud providers need buy nothing here. What it catches
+  # is what a labelled pull request cannot -- a merge of two green branches, a
+  # sveltos or CAPI bump, a chart in the catalog moving under us.
+  schedule:
+    - cron: '17 4 * * *'
+
 permissions:
   contents: read
 
@@ -29,9 +38,10 @@ jobs:
     concurrency:
       group: e2e-gate-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
-    if: ${{ contains( github.event.pull_request.labels.*.name, 'test e2e') }}
-    # single approval gate; per-provider envs carry secrets only, no reviewers
-    environment: e2e-gate
+    if: ${{ github.event_name == 'schedule' || contains( github.event.pull_request.labels.*.name, 'test e2e') }}
+    # single approval gate; per-provider envs carry secrets only, no reviewers.
+    # A scheduled run has no fork code and asks for no secrets, so it skips it.
+    environment: ${{ github.event_name != 'schedule' && 'e2e-gate' || null }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -58,6 +68,21 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
+
+          # A scheduled run has no approval comment to read the configuration
+          # from. Docker only, and with no template, so the suite resolves the
+          # newest docker-hosted-cp ClusterTemplate itself and a chart bump does
+          # not have to be repeated here.
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ]; then
+            {
+              echo "runner=ubuntu-latest"
+              echo "skip_arm=true"
+              echo "public_repo=false"
+              echo "config=$(printf 'docker:\n- {}\n' | base64 -w 0)"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           config=$(gh api "/repos/${REPO}/actions/runs/${RUN_ID}/approvals" --jq '.[0].comment // ""')
           if [ -z "$config" ]; then
             echo "::notice::no approval comment present; default aws-only matrix will be emitted"
@@ -133,6 +158,8 @@ jobs:
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - name: Poll ci.yml conclusion for PR head SHA
+        # nothing to wait for on a schedule: main is already merged and tested
+        if: ${{ github.event_name != 'schedule' }}
         run: |
           set -euo pipefail
           POLL_INTERVAL=20
@@ -190,6 +217,8 @@ jobs:
         id: pr
         with:
           script: |
+            // a scheduled run has no pull request: test main as it stands
+            if (!context.payload.pull_request) return context.sha;
             const { data: pullRequest } = await github.rest.pulls.get({
               ...context.repo,
               pull_number: context.payload.pull_request.number,
@@ -283,7 +312,8 @@ jobs:
       - push-public
     if: |
       always() &&
-      contains( github.event.pull_request.labels.*.name, 'test e2e') &&
+      (github.event_name == 'schedule' ||
+        contains( github.event.pull_request.labels.*.name, 'test e2e')) &&
       needs.wait-for-ci.result == 'success' &&
       needs.gate.outputs.matrix != '[]' &&
       (needs.push-public.result == 'success' || needs.push-public.result == 'skipped')
