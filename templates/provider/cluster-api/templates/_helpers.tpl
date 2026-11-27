@@ -259,6 +259,23 @@ Build default core provider patches
     kind: Deployment
     namespace: {{ .Release.Namespace }}
 {{- end }}
+{{- with (include "coreProvider.logDiscoveryConfig" . | trim) }}
+- patch: |
+    apiVersion: apps/v1
+    kind: Deployment
+    spec:
+      template:
+        metadata:
+          annotations:
+            io.opentelemetry.discovery.logs.manager/enabled: "true"
+            io.opentelemetry.discovery.logs.manager/config: |
+              {{- . | nindent 14 }}
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    namespace: {{ $.Release.Namespace }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -330,4 +347,39 @@ Whether in-place updates are enabled, the chart value takes precedence over the 
 {{- else -}}
 {{- $global.enableInPlaceUpdates | default false -}}
 {{- end -}}
+{{- end }}
+
+{{/*
+KOF log-discovery config for the manager container, which writes klog JSON
+(--logging-format=json): epoch milliseconds in ts, verbosity in v, and err only on error lines
+*/}}
+{{- define "coreProvider.logDiscoveryConfig" -}}
+operators:
+  - id: container-parser
+    type: container
+    max_log_size: 102400
+  - id: json-parser
+    type: json_parser
+    if: body matches "^\\s*\\{"
+    parse_from: body
+    parse_to: attributes
+    on_error: send_quiet
+    timestamp:
+      parse_from: attributes.ts
+      layout_type: epoch
+      layout: ms
+  - id: error-level
+    type: add
+    if: attributes.err != nil
+    field: attributes.log_level
+    value: error
+  - id: info-level
+    type: add
+    if: attributes.err == nil and attributes.v != nil
+    field: attributes.log_level
+    value: info
+  - id: severity
+    type: severity_parser
+    if: attributes.log_level != nil
+    parse_from: attributes.log_level
 {{- end }}

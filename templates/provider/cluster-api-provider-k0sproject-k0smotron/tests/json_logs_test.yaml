@@ -45,3 +45,12 @@ tests:
         documentSelector:
           path: kind
           value: ControlPlaneProvider
+
+  - it: "adds the KOF log-discovery annotations for the zap JSON format on all providers"
+    asserts:
+      - matchRegex:
+          path: spec.patches[0].patch
+          pattern: 'io\.opentelemetry\.discovery\.logs\.manager/enabled: "true"'
+      - matchRegex:
+          path: spec.patches[0].patch
+          pattern: 'layout: "2006-01-02T15:04:05\.000Z0700"\s+severity:\s+parse_from: attributes\.level'
