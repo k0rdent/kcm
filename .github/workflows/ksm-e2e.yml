@@ -67,7 +67,7 @@ jobs:
     # Pinned, not floating: the scenarios live in another repository, and on main
     # a change there would turn this red with nothing in this repository to
     # explain it. Bumping the tag is a pull request like any other.
-    uses: k0rdent/ksm-tests/.github/workflows/e2e.yml@v1.4.0
+    uses: k0rdent/ksm-tests/.github/workflows/e2e.yml@v1.5.1
     with:
       # The same ref as the uses: line above. A called workflow cannot discover
       # the ref it was reached at -- no context exposes it -- so it has to be
