@@ -11,7 +11,7 @@ spec:
     name: {{ .Values.configSecret.name  | quote }}
     namespace: {{ .Values.configSecret.namespace | default .Release.Namespace | trunc 63  | quote }}
   {{- end }}
-  manager: {{- toYaml .Values.infrastructure.manager | nindent 4 }}
+  manager: {{- include "provider.manager.jsonLogs" .Values.infrastructure.manager | nindent 4 }}
   {{- if $global.registry }}
   fetchConfig:
     oci: {{ $global.registry }}/capi/cluster-api-provider-k0sproject-k0smotron-components:{{ $version }}
@@ -34,7 +34,7 @@ spec:
     name: {{ .Values.configSecret.name  | quote }}
     namespace: {{ .Values.configSecret.namespace | default .Release.Namespace | trunc 63  | quote }}
   {{- end }}
-  manager: {{- toYaml .Values.bootstrap.manager | nindent 4 }}
+  manager: {{- include "provider.manager.jsonLogs" .Values.bootstrap.manager | nindent 4 }}
   {{- if $global.registry }}
   fetchConfig:
     oci: {{ $global.registry }}/capi/cluster-api-provider-k0sproject-k0smotron-components:{{ $version }}

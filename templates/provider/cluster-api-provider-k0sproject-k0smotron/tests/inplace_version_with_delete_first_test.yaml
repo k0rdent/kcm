@@ -7,9 +7,8 @@ tests:
   - it: "keeps managers untouched when disabled"
     template: templates/providers.yaml
     asserts:
-      - equal:
-          path: spec.manager
-          value: {}
+      - notExists:
+          path: spec.manager.featureGates
 
   - it: "enables InPlaceVersionWithDeleteFirst feature gate on the controlplane provider only"
     set:
@@ -23,15 +22,13 @@ tests:
         documentSelector:
           path: kind
           value: ControlPlaneProvider
-      - equal:
-          path: spec.manager
-          value: {}
+      - notExists:
+          path: spec.manager.featureGates
         documentSelector:
           path: kind
           value: BootstrapProvider
-      - equal:
-          path: spec.manager
-          value: {}
+      - notExists:
+          path: spec.manager.featureGates
         documentSelector:
           path: kind
           value: InfrastructureProvider
@@ -101,6 +98,5 @@ tests:
       path: kind
       value: ControlPlaneProvider
     asserts:
-      - equal:
-          path: spec.manager
-          value: {}
+      - notExists:
+          path: spec.manager.featureGates

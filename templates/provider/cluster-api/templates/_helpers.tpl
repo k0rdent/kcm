@@ -291,7 +291,7 @@ RuntimeSDK: true
 {{- end }}
 
 {{/*
-Manager settings with the default feature gates, user-provided feature gates take precedence.
+Manager settings with the default feature gates and JSON logging, user-provided feature gates and additional args take precedence.
 Fails if the resulting InPlaceUpdates feature gate is enabled without the RuntimeSDK one,
 since the core provider manager exits on start with such a combination
 */}}
@@ -307,6 +307,11 @@ since the core provider manager exits on start with such a combination
 {{- end -}}
 {{- $_ := set $manager "featureGates" $featureGates -}}
 {{- end -}}
+{{- $additionalArgs := $manager.additionalArgs | default dict -}}
+{{- if not (hasKey $additionalArgs "--logging-format") -}}
+{{- $_ := set $additionalArgs "--logging-format" "json" -}}
+{{- end -}}
+{{- $_ := set $manager "additionalArgs" $additionalArgs -}}
 {{- $featureGates := $manager.featureGates | default dict -}}
 {{- if and (eq (toString (get $featureGates "InPlaceUpdates")) "true") (ne (toString (get $featureGates "RuntimeSDK")) "true") -}}
 {{- fail "manager.featureGates.InPlaceUpdates requires manager.featureGates.RuntimeSDK to be enabled" -}}

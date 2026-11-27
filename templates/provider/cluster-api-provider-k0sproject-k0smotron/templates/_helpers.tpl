@@ -339,7 +339,7 @@ InPlaceVersionWithDeleteFirst: true
 {{- end }}
 
 {{/*
-Control plane provider manager settings with the default feature gates, user-provided feature gates take precedence
+Control plane provider manager settings with the default feature gates and JSON logging, user-provided feature gates and additional args take precedence
 */}}
 {{- define "controlPlaneProvider.manager" -}}
 {{- $controlPlane := .Values.controlPlane | default dict -}}
@@ -354,6 +354,21 @@ Control plane provider manager settings with the default feature gates, user-pro
 {{- end -}}
 {{- $_ := set $manager "featureGates" $featureGates -}}
 {{- end -}}
+{{- include "provider.manager.jsonLogs" $manager | fromYaml | toYaml -}}
+{{- end }}
+
+{{/*
+Manager settings with JSON logging enabled, user-provided additional args take precedence
+*/}}
+{{- define "provider.manager.jsonLogs" -}}
+{{- $manager := deepCopy (. | default dict) -}}
+{{- $additionalArgs := $manager.additionalArgs | default dict -}}
+{{- range $arg, $value := dict "--zap-encoder" "json" "--zap-time-encoding" "iso8601" -}}
+{{- if not (hasKey $additionalArgs $arg) -}}
+{{- $_ := set $additionalArgs $arg $value -}}
+{{- end -}}
+{{- end -}}
+{{- $_ := set $manager "additionalArgs" $additionalArgs -}}
 {{- toYaml $manager -}}
 {{- end }}
 

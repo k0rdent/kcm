@@ -1,0 +1,23 @@
+suite: Cluster API core provider JSON logs
+templates:
+  - templates/provider.yaml
+
+tests:
+  - it: "sets the JSON logging format by default"
+    asserts:
+      - equal:
+          path: spec.manager.additionalArgs
+          value:
+            --logging-format: json
+
+  - it: "keeps user-provided additional args and logging format"
+    set:
+      manager.additionalArgs:
+        --logging-format: text
+        --foo: bar
+    asserts:
+      - equal:
+          path: spec.manager.additionalArgs
+          value:
+            --logging-format: text
+            --foo: bar
