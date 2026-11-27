@@ -928,6 +928,70 @@ var _ = Describe("ServiceSet Controller integration tests", Ordered, func() {
 		})
 	})
 
+	Context("When ServiceSet is deleted while its Profile is still paused", func() {
+		It("should unpause the Profile so that sveltos can finalize it", func() {
+			const sveltosProfileFinalizer = "profilefinalizer.projectsveltos.io"
+
+			By("making StateManagementProvider ready", func() {
+				stateManagementProvider.Status.Ready = true
+				Expect(cl.Status().Update(ctx, &stateManagementProvider)).To(Succeed())
+			})
+
+			By("reconciling to create the Profile", func() {
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&serviceSet)})
+				Expect(err).To(Succeed())
+			})
+
+			By("holding the Profile with the sveltos finalizer", func() {
+				prof := addoncontrollerv1beta1.Profile{}
+				Expect(cl.Get(ctx, client.ObjectKeyFromObject(&serviceSet), &prof)).To(Succeed())
+				prof.Finalizers = append(prof.Finalizers, sveltosProfileFinalizer)
+				Expect(cl.Update(ctx, &prof)).To(Succeed())
+			})
+
+			By("pausing the ServiceSet and propagating the pause to the Profile", func() {
+				ss := &kcmv1.ServiceSet{}
+				Expect(cl.Get(ctx, client.ObjectKeyFromObject(&serviceSet), ss)).To(Succeed())
+				ss.SetAnnotations(map[string]string{kcmv1.ServiceSetPausedAnnotation: "true"})
+				Expect(cl.Update(ctx, ss)).To(Succeed())
+
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&serviceSet)})
+				Expect(err).To(Succeed())
+
+				prof := addoncontrollerv1beta1.Profile{}
+				Expect(cl.Get(ctx, client.ObjectKeyFromObject(&serviceSet), &prof)).To(Succeed())
+				Expect(prof.Annotations).To(HaveKey(addoncontrollerv1beta1.ProfilePausedAnnotation))
+			})
+
+			By("deleting the ServiceSet while the Profile is paused", func() {
+				Expect(cl.Delete(ctx, &serviceSet)).To(Succeed())
+			})
+
+			By("reconciling: the Profile loses the pause annotation and is deleted", func() {
+				result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&serviceSet)})
+				Expect(err).To(Succeed())
+				Expect(result.RequeueAfter).To(Equal(reconciler.requeueInterval))
+
+				prof := addoncontrollerv1beta1.Profile{}
+				Expect(cl.Get(ctx, client.ObjectKeyFromObject(&serviceSet), &prof)).To(Succeed())
+				Expect(prof.Annotations).NotTo(HaveKey(addoncontrollerv1beta1.ProfilePausedAnnotation))
+				Expect(prof.DeletionTimestamp.IsZero()).To(BeFalse())
+			})
+
+			By("cleaning up: release the finalizers the test holds", func() {
+				prof := addoncontrollerv1beta1.Profile{}
+				Expect(cl.Get(ctx, client.ObjectKeyFromObject(&serviceSet), &prof)).To(Succeed())
+				prof.Finalizers = nil
+				Expect(cl.Update(ctx, &prof)).To(Succeed())
+
+				ss := &kcmv1.ServiceSet{}
+				Expect(cl.Get(ctx, client.ObjectKeyFromObject(&serviceSet), ss)).To(Succeed())
+				ss.Finalizers = nil
+				Expect(cl.Update(ctx, ss)).To(Succeed())
+			})
+		})
+	})
+
 	Context("When ServiceSet is deleted with no Profile and empty service list", func() {
 		It("should remove the finalizer and allow object deletion", func() {
 			By("deleting the ServiceSet to trigger reconcileDelete", func() {
