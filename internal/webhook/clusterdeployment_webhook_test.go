@@ -452,6 +452,30 @@ func TestClusterDeploymentValidateCreate(t *testing.T) {
 			},
 			err: fmt.Sprintf("the ClusterDeployment is invalid: provider %s does not support ClusterIdentity Kind %s from the Credential %s/%s", "infrastructure-aws", "SomeOtherDummyClusterStaticIdentity", metav1.NamespaceDefault, testCredentialName),
 		},
+		{
+			name: "should fail if serviceSpec.syncMode is ContinuousWithDriftDetection",
+			ClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+				clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{SyncMode: "ContinuousWithDriftDetection"}), //nolint:staticcheck
+			),
+			existingObjects: []runtime.Object{
+				mgmt,
+				cred,
+				providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+				),
+			},
+			warnings: admission.Warnings{"Failed to validate syncMode for provided ClusterDeployment"},
+			err:      "SyncModeContinuousWithDriftDetection is not supported",
+		},
 	}
 
 	for _, tt := range tests {
@@ -1100,6 +1124,106 @@ func TestClusterDeploymentValidateUpdate(t *testing.T) {
 						Kind: "HelmChart",
 						Name: "new-chart",
 					}),
+				),
+			},
+		},
+		{
+			name:                      "should fail if serviceSpec.syncMode is updated to ContinuousWithDriftDetection",
+			skipUpgradePathValidation: true,
+			oldClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+			),
+			newClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+				clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{SyncMode: "ContinuousWithDriftDetection"}), //nolint:staticcheck
+			),
+			existingObjects: []runtime.Object{
+				mgmt, cred, providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+				),
+			},
+			warnings: admission.Warnings{"Failed to validate syncMode for provided ClusterDeployment"},
+			err:      "SyncModeContinuousWithDriftDetection is not supported",
+		},
+		{
+			// A ClusterDeployment created before this validation shipped must stay
+			// editable: an update unrelated to syncMode must not be rejected just
+			// because the (pre-existing) syncMode is unsupported.
+			name:                      "should not fail when syncMode was already ContinuousWithDriftDetection and the update only adds a label",
+			skipUpgradePathValidation: true,
+			oldClusterDeployment: clusterdeployment.NewClusterDeployment(
+				clusterdeployment.WithClusterTemplate(testTemplateName),
+				clusterdeployment.WithCredential(testCredentialName),
+				clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{SyncMode: "ContinuousWithDriftDetection"}), //nolint:staticcheck
+			),
+			newClusterDeployment: func() *kcmv1.ClusterDeployment {
+				cd := clusterdeployment.NewClusterDeployment(
+					clusterdeployment.WithClusterTemplate(testTemplateName),
+					clusterdeployment.WithCredential(testCredentialName),
+					clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{SyncMode: "ContinuousWithDriftDetection"}), //nolint:staticcheck
+				)
+				cd.Labels = map[string]string{"foo": "bar"}
+				return cd
+			}(),
+			existingObjects: []runtime.Object{
+				mgmt, cred, providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
+				),
+			},
+		},
+		{
+			// The controller itself updates the object as part of tearing it down
+			// (e.g. to remove its finalizer); that update must not be rejected
+			// because of a syncMode set before this validation shipped.
+			name:                      "should not fail when syncMode is ContinuousWithDriftDetection and the object is being deleted",
+			skipUpgradePathValidation: true,
+			oldClusterDeployment: func() *kcmv1.ClusterDeployment {
+				cd := clusterdeployment.NewClusterDeployment(
+					clusterdeployment.WithClusterTemplate(testTemplateName),
+					clusterdeployment.WithCredential(testCredentialName),
+					clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{SyncMode: "ContinuousWithDriftDetection"}), //nolint:staticcheck
+				)
+				now := metav1.Now()
+				cd.DeletionTimestamp = &now
+				cd.Finalizers = []string{"some.finalizer/kcm"}
+				return cd
+			}(),
+			newClusterDeployment: func() *kcmv1.ClusterDeployment {
+				cd := clusterdeployment.NewClusterDeployment(
+					clusterdeployment.WithClusterTemplate(testTemplateName),
+					clusterdeployment.WithCredential(testCredentialName),
+					clusterdeployment.WithServiceSpec(kcmv1.ServiceSpec{SyncMode: "ContinuousWithDriftDetection"}), //nolint:staticcheck
+				)
+				now := metav1.Now()
+				cd.DeletionTimestamp = &now
+				return cd
+			}(),
+			existingObjects: []runtime.Object{
+				mgmt, cred, providerInterface,
+				template.NewClusterTemplate(
+					template.WithName(testTemplateName),
+					template.WithValidationStatus(kcmv1.TemplateValidationStatus{Valid: true}),
+					template.WithProvidersStatus(
+						"infrastructure-aws",
+						"control-plane-k0smotron",
+						"bootstrap-k0smotron",
+					),
 				),
 			},
 		},

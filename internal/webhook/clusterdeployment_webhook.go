@@ -65,6 +65,11 @@ func (v *ClusterDeploymentValidator) ValidateCreate(ctx context.Context, cluster
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
 	}
 
+	// No API calls: run before the checks below so an invalid syncMode fails fast.
+	if err := validationutil.ClusterDeployDriftDetection(clusterDeployment); err != nil {
+		return admission.Warnings{"Failed to validate syncMode for provided ClusterDeployment"}, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
+	}
+
 	if err := validationutil.ClusterTemplateProviders(ctx, v.Client, template, clusterDeployment); err != nil {
 		return admission.Warnings{"Failed to validate required providers"}, fmt.Errorf("failed to validate required providers: %w", err)
 	}
@@ -98,6 +103,21 @@ func (v *ClusterDeploymentValidator) ValidateUpdate(ctx context.Context, oldClus
 	template, err := v.getClusterDeploymentTemplate(ctx, newClusterDeployment.Namespace, newTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, err)
+	}
+
+	// Reject only a syncMode that is newly introduced by this update, and skip the check
+	// entirely once the object is being deleted:
+	//   - An object that already had the unsupported syncMode before this webhook existed
+	//     must stay editable, otherwise every future update to it - including the
+	//     controller's own writes - would be rejected.
+	//   - Deletion must not be blocked either, since the controller updates the object
+	//     (e.g. to remove its finalizer) as part of tearing it down.
+	if newClusterDeployment.DeletionTimestamp.IsZero() {
+		if newErr := validationutil.ClusterDeployDriftDetection(newClusterDeployment); newErr != nil {
+			if oldErr := validationutil.ClusterDeployDriftDetection(oldClusterDeployment); oldErr == nil {
+				return admission.Warnings{"Failed to validate syncMode for provided ClusterDeployment"}, fmt.Errorf("%s: %w", invalidClusterDeploymentMsg, newErr)
+			}
+		}
 	}
 
 	if oldTemplate != newTemplate {

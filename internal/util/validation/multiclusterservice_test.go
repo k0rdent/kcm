@@ -17,12 +17,34 @@ package validation
 import (
 	"testing"
 
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 )
+
+// TestMultiClusterServiceDriftDetection only checks that the wrapper forwards
+// mcs.Spec.ServiceSpec to serviceSpecDriftDetection; see TestServiceSpecDriftDetection
+// in services_test.go for the full matrix of cases.
+func TestMultiClusterServiceDriftDetection(t *testing.T) {
+	ok := &kcmv1.MultiClusterService{
+		Name: "mcs1",
+		Spec: kcmv1.MultiClusterServiceSpec{
+			ServiceSpec: kcmv1.ServiceSpec{SyncMode: string(addoncontrollerv1beta1.SyncModeContinuous)}, //nolint:staticcheck
+		},
+	}
+	require.NoError(t, MultiClusterServiceDriftDetection(ok))
+
+	bad := &kcmv1.MultiClusterService{
+		Name: "mcs1",
+		Spec: kcmv1.MultiClusterServiceSpec{
+			ServiceSpec: kcmv1.ServiceSpec{SyncMode: string(addoncontrollerv1beta1.SyncModeContinuousWithDriftDetection)}, //nolint:staticcheck
+		},
+	}
+	require.ErrorContains(t, MultiClusterServiceDriftDetection(bad), "SyncModeContinuousWithDriftDetection is not supported")
+}
 
 func TestValidateMCSDependency(t *testing.T) {
 	for _, tc := range []struct {

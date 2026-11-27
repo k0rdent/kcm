@@ -48,3 +48,9 @@ func WithServiceTemplate(templateName string) Opt {
 		})
 	}
 }
+
+func WithServiceSpec(serviceSpec kcmv1.ServiceSpec) Opt {
+	return func(p *kcmv1.MultiClusterService) {
+		p.Spec.ServiceSpec = serviceSpec
+	}
+}

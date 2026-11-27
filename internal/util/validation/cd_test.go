@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	addoncontrollerv1beta1 "github.com/projectsveltos/addon-controller/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	clusterapiv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -26,6 +27,32 @@ import (
 	kcmv1 "github.com/K0rdent/kcm/api/v1beta1"
 	testscheme "github.com/K0rdent/kcm/test/scheme"
 )
+
+// TestClusterDeployDriftDetection only checks that the wrapper forwards
+// cd.Spec.ServiceSpec to serviceSpecDriftDetection; see TestServiceSpecDriftDetection
+// in services_test.go for the full matrix of cases.
+func TestClusterDeployDriftDetection(t *testing.T) {
+	ok := &kcmv1.ClusterDeployment{
+		Name: "cd1", Namespace: "ns1",
+		Spec: kcmv1.ClusterDeploymentSpec{
+			ServiceSpec: kcmv1.ServiceSpec{SyncMode: string(addoncontrollerv1beta1.SyncModeContinuous)}, //nolint:staticcheck
+		},
+	}
+	if err := ClusterDeployDriftDetection(ok); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	bad := &kcmv1.ClusterDeployment{
+		Name: "cd1", Namespace: "ns1",
+		Spec: kcmv1.ClusterDeploymentSpec{
+			ServiceSpec: kcmv1.ServiceSpec{SyncMode: string(addoncontrollerv1beta1.SyncModeContinuousWithDriftDetection)}, //nolint:staticcheck
+		},
+	}
+	err := ClusterDeployDriftDetection(bad)
+	if err == nil || !strings.Contains(err.Error(), "SyncModeContinuousWithDriftDetection is not supported") {
+		t.Fatalf("err = %v, want error containing %q", err, "SyncModeContinuousWithDriftDetection is not supported")
+	}
+}
 
 func TestClusterDeployCredential(t *testing.T) {
 	baseCD := &kcmv1.ClusterDeployment{
